@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package prediction;
+
+option go_package = "crypto-trading-bot/internal/ml/proto";
+
+service PredictionService {
+    // Get price direction prediction
+    rpc Predict(PredictionRequest) returns (PredictionResponse);
+
+    // Get predictions for multiple timeframes
+    rpc PredictMultiTimeframe(MultiTimeframeRequest) returns (MultiTimeframeResponse);
+
+    // Get sentiment analysis
+    rpc AnalyzeSentiment(SentimentRequest) returns (SentimentResponse);
+
+    // Analyze Trump tweet
+    rpc AnalyzeTrumpTweet(TweetRequest) returns (TweetAnalysisResponse);
+
+    // Health check
+    rpc HealthCheck(Empty) returns (HealthResponse);
+}
+
+message Empty {}
+
+message HealthResponse {
+    bool healthy = 1;
+    string version = 2;
+    repeated string loaded_models = 3;
+}
+
+message PredictionRequest {
+    string symbol = 1;
+    string timeframe = 2;
+    repeated Candle candles = 3;
+    IndicatorValues indicators = 4;
+    float sentiment_score = 5;
+}
+
+message Candle {
+    int64 timestamp = 1;
+    double open = 2;
+    double high = 3;
+    double low = 4;
+    double close = 5;
+    double volume = 6;
+}
+
+message IndicatorValues {
+    double ema9 = 1;
+    double ema21 = 2;
+    double ema50 = 3;
+    double ema200 = 4;
+    double rsi14 = 5;
+    double rsi7 = 6;
+    double macd_line = 7;
+    double macd_signal = 8;
+    double macd_hist = 9;
+    double bb_upper = 10;
+    double bb_middle = 11;
+    double bb_lower = 12;
+    double bb_percent_b = 13;
+    double atr14 = 14;
+    double stoch_rsi_k = 15;
+    double stoch_rsi_d = 16;
+    double obv = 17;
+}
+
+message PredictionResponse {
+    string direction = 1;         // "UP", "DOWN", "NEUTRAL"
+    double probability = 2;        // 0-1
+    double confidence = 3;         // 0-1
+    double expected_move = 4;      // Expected price change %
+    string model_used = 5;
+    int64 timestamp = 6;
+}
+
+message MultiTimeframeRequest {
+    string symbol = 1;
+    repeated string timeframes = 2;
+    map<string, CandleArray> candles_by_timeframe = 3;
+    float sentiment_score = 4;
+}
+
+message CandleArray {
+    repeated Candle candles = 1;
+}
+
+message MultiTimeframeResponse {
+    map<string, PredictionResponse> predictions = 1;
+    ConsensusResult consensus = 2;
+}
+
+message ConsensusResult {
+    string direction = 1;
+    double alignment = 2;      // How many timeframes agree (0-1)
+    double confidence = 3;
+    bool actionable = 4;       // True if alignment > threshold
+}
+
+message SentimentRequest {
+    repeated string texts = 1;
+    string source = 2;         // "twitter", "news", "reddit"
+}
+
+message SentimentResponse {
+    double overall_score = 1;   // -1 to 1
+    double positive = 2;
+    double negative = 3;
+    double neutral = 4;
+    repeated TextSentiment individual = 5;
+}
+
+message TextSentiment {
+    string text = 1;
+    double score = 2;
+    string label = 3;
+}
+
+message TweetRequest {
+    string tweet_text = 1;
+    string author = 2;
+    int64 timestamp = 3;
+}
+
+message TweetAnalysisResponse {
+    double impact_score = 1;     // 0-1, how impactful for crypto
+    double sentiment = 2;        // -1 to 1
+    double signal = 3;           // Combined impact * sentiment
+    repeated string keywords = 4;
+    string analysis = 5;
+    bool is_crypto_related = 6;
+    bool is_market_related = 7;
+}
