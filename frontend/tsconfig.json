@@ -26,6 +26,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "wailsjs"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

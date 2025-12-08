@@ -118,3 +118,283 @@ export namespace indicators {
 
 }
 
+export namespace sentiment {
+	
+	export class SentimentScore {
+	    overallScore: number;
+	    positive: number;
+	    negative: number;
+	    neutral: number;
+	    // Go type: time
+	    timestamp: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new SentimentScore(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.overallScore = source["overallScore"];
+	        this.positive = source["positive"];
+	        this.negative = source["negative"];
+	        this.neutral = source["neutral"];
+	        this.timestamp = this.convertValues(source["timestamp"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace signals {
+	
+	export class Signal {
+	    id: string;
+	    symbol: string;
+	    timeframe: string;
+	    direction: string;
+	    confidence: number;
+	    probability: number;
+	    price: number;
+	    atr: number;
+	    technicalSignal: number;
+	    mlSignal: number;
+	    sentimentSignal: number;
+	    // Go type: time
+	    timestamp: any;
+	    reasons: string[];
+	    model: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Signal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.symbol = source["symbol"];
+	        this.timeframe = source["timeframe"];
+	        this.direction = source["direction"];
+	        this.confidence = source["confidence"];
+	        this.probability = source["probability"];
+	        this.price = source["price"];
+	        this.atr = source["atr"];
+	        this.technicalSignal = source["technicalSignal"];
+	        this.mlSignal = source["mlSignal"];
+	        this.sentimentSignal = source["sentimentSignal"];
+	        this.timestamp = this.convertValues(source["timestamp"], null);
+	        this.reasons = source["reasons"];
+	        this.model = source["model"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace trading {
+	
+	export class Position {
+	    id: string;
+	    symbol: string;
+	    side: string;
+	    entryPrice: number;
+	    quantity: number;
+	    stopLoss: number;
+	    takeProfit: number;
+	    // Go type: time
+	    openedAt: any;
+	    signalId: string;
+	    unrealizedPnL: number;
+	    unrealizedPnLPct: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Position(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.symbol = source["symbol"];
+	        this.side = source["side"];
+	        this.entryPrice = source["entryPrice"];
+	        this.quantity = source["quantity"];
+	        this.stopLoss = source["stopLoss"];
+	        this.takeProfit = source["takeProfit"];
+	        this.openedAt = this.convertValues(source["openedAt"], null);
+	        this.signalId = source["signalId"];
+	        this.unrealizedPnL = source["unrealizedPnL"];
+	        this.unrealizedPnLPct = source["unrealizedPnLPct"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Trade {
+	    id: string;
+	    symbol: string;
+	    side: string;
+	    entryPrice: number;
+	    exitPrice: number;
+	    quantity: number;
+	    pnl: number;
+	    pnlPercent: number;
+	    duration: number;
+	    // Go type: time
+	    openedAt: any;
+	    // Go type: time
+	    closedAt: any;
+	    reason: string;
+	    signalId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Trade(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.symbol = source["symbol"];
+	        this.side = source["side"];
+	        this.entryPrice = source["entryPrice"];
+	        this.exitPrice = source["exitPrice"];
+	        this.quantity = source["quantity"];
+	        this.pnl = source["pnl"];
+	        this.pnlPercent = source["pnlPercent"];
+	        this.duration = source["duration"];
+	        this.openedAt = this.convertValues(source["openedAt"], null);
+	        this.closedAt = this.convertValues(source["closedAt"], null);
+	        this.reason = source["reason"];
+	        this.signalId = source["signalId"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TradingStats {
+	    totalTrades: number;
+	    winningTrades: number;
+	    losingTrades: number;
+	    totalPnL: number;
+	    totalPnLPercent: number;
+	    winRate: number;
+	    avgWin: number;
+	    avgLoss: number;
+	    profitFactor: number;
+	    maxDrawdown: number;
+	    currentDrawdown: number;
+	    peakBalance: number;
+	    dailyPnL: number;
+	    todayTrades: number;
+	    // Go type: time
+	    lastTradeTime: any;
+	    // Go type: time
+	    startTime: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new TradingStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalTrades = source["totalTrades"];
+	        this.winningTrades = source["winningTrades"];
+	        this.losingTrades = source["losingTrades"];
+	        this.totalPnL = source["totalPnL"];
+	        this.totalPnLPercent = source["totalPnLPercent"];
+	        this.winRate = source["winRate"];
+	        this.avgWin = source["avgWin"];
+	        this.avgLoss = source["avgLoss"];
+	        this.profitFactor = source["profitFactor"];
+	        this.maxDrawdown = source["maxDrawdown"];
+	        this.currentDrawdown = source["currentDrawdown"];
+	        this.peakBalance = source["peakBalance"];
+	        this.dailyPnL = source["dailyPnL"];
+	        this.todayTrades = source["todayTrades"];
+	        this.lastTradeTime = this.convertValues(source["lastTradeTime"], null);
+	        this.startTime = this.convertValues(source["startTime"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+

@@ -8,6 +8,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  publicDir: false,
   server: {
     port: 34115,
     strictPort: true,

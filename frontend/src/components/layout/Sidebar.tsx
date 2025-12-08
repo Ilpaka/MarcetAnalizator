@@ -10,13 +10,13 @@ import {
 } from 'lucide-react'
 
 const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/trading', icon: TrendingUp, label: 'Trading' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
-  { to: '/bot', icon: Bot, label: 'Bot Control' },
-  { to: '/sentiment', icon: Heart, label: 'Sentiment' },
-  { to: '/backtest', icon: FlaskConical, label: 'Backtest' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Панель управления' },
+  { to: '/trading', icon: TrendingUp, label: 'Торговля' },
+  { to: '/analytics', icon: BarChart3, label: 'Аналитика' },
+  { to: '/bot', icon: Bot, label: 'Управление ботом' },
+  { to: '/sentiment', icon: Heart, label: 'Настроения' },
+  { to: '/backtest', icon: FlaskConical, label: 'Бэктест' },
+  { to: '/settings', icon: Settings, label: 'Настройки' },
 ]
 
 export default function Sidebar() {
@@ -25,7 +25,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="h-16 flex items-center px-6 border-b border-border-primary">
         <Bot className="w-8 h-8 text-primary-500 mr-3" />
-        <h1 className="text-xl font-bold">Crypto Bot</h1>
+        <h1 className="text-xl font-bold">Крипто Бот</h1>
       </div>
 
       {/* Navigation */}
@@ -51,7 +51,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="p-4 border-t border-border-primary">
         <div className="text-xs text-gray-500 text-center">
-          v1.0.0 • ML Trading Bot
+          v1.0.0 • ML Торговый Бот
         </div>
       </div>
     </aside>

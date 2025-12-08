@@ -16,6 +16,7 @@ type WSClient struct {
 	url         string
 	subscribers map[string][]chan interface{}
 	mu          sync.RWMutex
+	writeMu     sync.Mutex // Мьютекс для синхронизации записи в WebSocket
 	done        chan struct{}
 	reconnect   bool
 }
@@ -62,6 +63,14 @@ func NewWSClient() *WSClient {
 
 // Connect establishes WebSocket connection
 func (ws *WSClient) Connect() error {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	
+	// Если уже подключены, не переподключаемся
+	if ws.conn != nil {
+		return nil
+	}
+	
 	var err error
 	ws.conn, _, err = websocket.DefaultDialer.Dial(ws.url, nil)
 	if err != nil {
@@ -73,6 +82,13 @@ func (ws *WSClient) Connect() error {
 
 	log.Info("WebSocket connected to Binance")
 	return nil
+}
+
+// IsConnected проверяет, подключен ли WebSocket
+func (ws *WSClient) IsConnected() bool {
+	ws.mu.RLock()
+	defer ws.mu.RUnlock()
+	return ws.conn != nil
 }
 
 // SubscribeKline subscribes to kline/candlestick stream
@@ -88,7 +104,16 @@ func (ws *WSClient) SubscribeKline(symbol, interval string) (chan *KlineWSMessag
 		"id":     time.Now().UnixNano(),
 	}
 
-	if err := ws.conn.WriteJSON(msg); err != nil {
+	// Синхронизированная запись в WebSocket
+	ws.writeMu.Lock()
+	if ws.conn == nil {
+		ws.writeMu.Unlock()
+		return nil, fmt.Errorf("websocket connection is nil")
+	}
+	err := ws.conn.WriteJSON(msg)
+	ws.writeMu.Unlock()
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -121,7 +146,15 @@ func (ws *WSClient) SubscribeTicker(symbol string) (chan *TickerWSMessage, error
 		"id":     time.Now().UnixNano(),
 	}
 
-	if err := ws.conn.WriteJSON(msg); err != nil {
+	ws.writeMu.Lock()
+	if ws.conn == nil {
+		ws.writeMu.Unlock()
+		return nil, fmt.Errorf("websocket connection is nil")
+	}
+	err := ws.conn.WriteJSON(msg)
+	ws.writeMu.Unlock()
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -154,7 +187,15 @@ func (ws *WSClient) SubscribeAllTickers() (chan *TickerWSMessage, error) {
 		"id":     time.Now().UnixNano(),
 	}
 
-	if err := ws.conn.WriteJSON(msg); err != nil {
+	ws.writeMu.Lock()
+	if ws.conn == nil {
+		ws.writeMu.Unlock()
+		return nil, fmt.Errorf("websocket connection is nil")
+	}
+	err := ws.conn.WriteJSON(msg)
+	ws.writeMu.Unlock()
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -219,10 +260,15 @@ func (ws *WSClient) pingLoop() {
 		case <-ws.done:
 			return
 		case <-ticker.C:
-			if err := ws.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				log.Errorf("Ping error: %v", err)
-				return
+			ws.writeMu.Lock()
+			if ws.conn != nil {
+				if err := ws.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					ws.writeMu.Unlock()
+					log.Errorf("Ping error: %v", err)
+					return
+				}
 			}
+			ws.writeMu.Unlock()
 		}
 	}
 }

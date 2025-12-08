@@ -19,7 +19,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "Crypto Trading Bot",
+		Title:  "Крипто Торговый Бот",
 		Width:  1920,
 		Height: 1080,
 		AssetServer: &assetserver.Options{

@@ -10,16 +10,48 @@ export function GetAllTickers() {
   return window['go']['main']['App']['GetAllTickers']();
 }
 
+export function GetBalance() {
+  return window['go']['main']['App']['GetBalance']();
+}
+
+export function GetBotStats() {
+  return window['go']['main']['App']['GetBotStats']();
+}
+
 export function GetKlines(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetKlines'](arg1, arg2, arg3);
+}
+
+export function GetPositions() {
+  return window['go']['main']['App']['GetPositions']();
+}
+
+export function GetSentimentScore() {
+  return window['go']['main']['App']['GetSentimentScore']();
 }
 
 export function GetSignals(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetSignals'](arg1, arg2, arg3);
 }
 
+export function GetSignalsList() {
+  return window['go']['main']['App']['GetSignalsList']();
+}
+
 export function GetTicker24h(arg1) {
   return window['go']['main']['App']['GetTicker24h'](arg1);
+}
+
+export function GetTradeHistory() {
+  return window['go']['main']['App']['GetTradeHistory']();
+}
+
+export function StartBot(arg1, arg2) {
+  return window['go']['main']['App']['StartBot'](arg1, arg2);
+}
+
+export function StopBot() {
+  return window['go']['main']['App']['StopBot']();
 }
 
 export function SubscribeKline(arg1, arg2) {

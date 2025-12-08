@@ -6,8 +6,8 @@ export default function Header() {
       {/* Left section */}
       <div className="flex items-center space-x-4">
         <div className="text-sm">
-          <span className="text-gray-400">Market Status:</span>
-          <span className="ml-2 text-profit font-medium">Open</span>
+          <span className="text-gray-400">Статус рынка:</span>
+          <span className="ml-2 text-profit font-medium">Открыт</span>
         </div>
         <div className="text-sm">
           <span className="text-gray-400">BTC:</span>
@@ -32,7 +32,7 @@ export default function Header() {
         {/* User */}
         <button className="flex items-center space-x-2 p-2 hover:bg-bg-elevated rounded-lg transition-colors">
           <User className="w-5 h-5" />
-          <span className="text-sm font-medium">Trader</span>
+          <span className="text-sm font-medium">Трейдер</span>
         </button>
       </div>
     </header>
