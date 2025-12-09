@@ -1,6 +1,7 @@
 package trading
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 type TradingEngine struct {
 	paperTrader   *PaperTrader
+	orderManager  *OrderManager
 	riskManager   *risk.RiskManager
 	signalHandler *signals.SignalHandler
 
@@ -50,8 +52,8 @@ type TradingStats struct {
 	PeakBalance      float64   `json:"peakBalance"`
 	DailyPnL         float64   `json:"dailyPnL"`
 	TodayTrades      int       `json:"todayTrades"`
-	LastTradeTime    time.Time `json:"lastTradeTime"`
-	StartTime         time.Time `json:"startTime"`
+	LastTradeTime    time.Time `json:"lastTradeTime" wails:"-"`
+	StartTime         time.Time `json:"startTime" wails:"-"`
 
 	mu sync.RWMutex
 }
@@ -66,6 +68,7 @@ func NewTradingEngine(config *EngineConfig) *TradingEngine {
 
 	return &TradingEngine{
 		paperTrader:   NewPaperTrader(config.InitialBalance),
+		orderManager:  NewOrderManager(),
 		riskManager:   risk.NewRiskManager(riskConfig),
 		signalHandler: signals.NewSignalHandler(),
 		config:        config,
@@ -111,6 +114,36 @@ func (te *TradingEngine) IsRunning() bool {
 	return te.isRunning
 }
 
+func (te *TradingEngine) UpdateConfig(newConfig *EngineConfig) {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	te.config = newConfig
+	// Обновляем risk manager
+	riskConfig := &risk.RiskConfig{
+		RiskPerTrade:      newConfig.RiskPerTrade,
+		MaxPositionSize:   newConfig.MaxPositionSize,
+		DefaultStopLoss:   newConfig.DefaultStopLoss,
+		DefaultTakeProfit: newConfig.DefaultTakeProfit,
+	}
+	te.riskManager = risk.NewRiskManager(riskConfig)
+}
+
+func (te *TradingEngine) GetSymbol() string {
+	te.mu.RLock()
+	defer te.mu.RUnlock()
+	return te.config.Symbol
+}
+
+func (te *TradingEngine) ProcessSignal(signal *signals.Signal) {
+	// Проверяем, что сигнал для нашего символа
+	if signal.Symbol != te.config.Symbol {
+		return
+	}
+
+	// Вызываем processSignals, который обработает сигнал
+	te.processSignals()
+}
+
 func (te *TradingEngine) mainLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -122,6 +155,7 @@ func (te *TradingEngine) mainLoop() {
 		case <-ticker.C:
 			te.processSignals()
 			te.checkPositions()
+			te.processOrders()
 		}
 	}
 }
@@ -132,13 +166,28 @@ func (te *TradingEngine) processSignals() {
 		return
 	}
 
+	// Проверяем, что сигнал для нашего символа
+	if signal.Symbol != te.config.Symbol {
+		return
+	}
+
+	// Проверяем, что сигнал не HOLD
+	if signal.Direction == "HOLD" {
+		return
+	}
+
 	if !te.canTrade() {
+		log.Debugf("Cannot trade: daily limit or cooldown")
 		return
 	}
 
 	if signal.Confidence < te.config.MinConfidence {
+		log.Debugf("Signal confidence %.2f below minimum %.2f", signal.Confidence, te.config.MinConfidence)
 		return
 	}
+
+	log.Infof("Processing signal: symbol=%s, direction=%s, confidence=%.2f, price=%.2f", 
+		signal.Symbol, signal.Direction, signal.Confidence, signal.Price)
 
 	if te.paperTrader.HasOpenPosition(te.config.Symbol) {
 		te.handleExistingPosition(signal)
@@ -165,26 +214,38 @@ func (te *TradingEngine) canTrade() bool {
 }
 
 func (te *TradingEngine) openPosition(signal *signals.Signal) {
+	log.Infof("=== BOT OPENING POSITION ===")
+	log.Infof("Signal: ID=%s, Symbol=%s, Direction=%s, Confidence=%.2f, Price=%.8f", 
+		signal.ID, signal.Symbol, signal.Direction, signal.Confidence, signal.Price)
+
 	balance := te.paperTrader.GetBalance()
 	currentPrice := signal.Price
 
 	stopLoss := te.calculateStopLoss(signal)
 	positionSize := te.riskManager.CalculatePositionSize(balance, currentPrice, stopLoss)
 
+	log.Infof("Position calculation: Balance=%.2f, CurrentPrice=%.8f, StopLoss=%.8f, PositionSize=%.8f",
+		balance, currentPrice, stopLoss, positionSize)
+
 	if positionSize <= 0 {
+		log.Warnf("Position size is 0 or negative, skipping position opening")
 		return
 	}
 
+	takeProfit := te.calculateTakeProfit(signal)
 	position := &Position{
 		Symbol:     te.config.Symbol,
 		Side:       signal.Direction,
 		EntryPrice: currentPrice,
 		Quantity:   positionSize,
 		StopLoss:   stopLoss,
-		TakeProfit: te.calculateTakeProfit(signal),
+		TakeProfit: takeProfit,
 		OpenedAt:   time.Now(),
 		SignalID:   signal.ID,
 	}
+
+	log.Infof("Position details: Symbol=%s, Side=%s, EntryPrice=%.8f, Quantity=%.8f, StopLoss=%.8f, TakeProfit=%.8f",
+		position.Symbol, position.Side, position.EntryPrice, position.Quantity, position.StopLoss, position.TakeProfit)
 
 	err := te.paperTrader.OpenPosition(position)
 	if err != nil {
@@ -194,14 +255,7 @@ func (te *TradingEngine) openPosition(signal *signals.Signal) {
 
 	te.updateStats(nil)
 
-	log.WithFields(log.Fields{
-		"symbol":     position.Symbol,
-		"side":       position.Side,
-		"entry":      position.EntryPrice,
-		"quantity":   position.Quantity,
-		"stopLoss":   position.StopLoss,
-		"takeProfit": position.TakeProfit,
-	}).Info("Position opened")
+	log.Info("=== BOT POSITION OPENED SUCCESSFULLY ===")
 }
 
 func (te *TradingEngine) handleExistingPosition(signal *signals.Signal) {
@@ -248,7 +302,13 @@ func (te *TradingEngine) checkPositions() {
 }
 
 func (te *TradingEngine) closePosition(pos *Position, reason string) {
+	log.Infof("=== BOT CLOSING POSITION ===")
+	log.Infof("Position: ID=%s, Symbol=%s, Side=%s, EntryPrice=%.8f, Quantity=%.8f", 
+		pos.ID, pos.Symbol, pos.Side, pos.EntryPrice, pos.Quantity)
+	log.Infof("Reason: %s", reason)
+
 	currentPrice := te.signalHandler.GetCurrentPrice(te.config.Symbol)
+	log.Infof("Current price: %.8f", currentPrice)
 
 	trade, err := te.paperTrader.ClosePosition(pos.Symbol, currentPrice, reason)
 	if err != nil {
@@ -258,13 +318,9 @@ func (te *TradingEngine) closePosition(pos *Position, reason string) {
 
 	te.updateStats(trade)
 
-	log.WithFields(log.Fields{
-		"symbol":   trade.Symbol,
-		"pnl":      trade.PnL,
-		"pnl%":     trade.PnLPercent,
-		"reason":   trade.Reason,
-		"duration": trade.Duration,
-	}).Info("Position closed")
+	log.Infof("=== BOT POSITION CLOSED SUCCESSFULLY ===")
+	log.Infof("Trade: ID=%s, PnL=%.2f USDT (%.2f%%), Duration=%v", 
+		trade.ID, trade.PnL, trade.PnLPercent, trade.Duration)
 }
 
 func (te *TradingEngine) isStopLossHit(pos *Position, price float64) bool {
@@ -380,5 +436,206 @@ func (te *TradingEngine) GetTradeHistory() []Trade {
 
 func (te *TradingEngine) SetSignalHandler(handler *signals.SignalHandler) {
 	te.signalHandler = handler
+}
+
+// PlaceBuyOrder places a manual buy order
+func (te *TradingEngine) PlaceBuyOrder(position *Position) error {
+	// Update position PnL before opening
+	if te.paperTrader.HasOpenPosition(position.Symbol) {
+		return fmt.Errorf("position already exists for %s", position.Symbol)
+	}
+
+	position.Side = "BUY"
+	return te.paperTrader.OpenPosition(position)
+}
+
+// PlaceSellOrder places a manual sell order
+func (te *TradingEngine) processOrders() {
+	// Process limit orders for current symbol
+	if te.config.Symbol != "" {
+		currentPrice := te.signalHandler.GetCurrentPrice(te.config.Symbol)
+		if currentPrice > 0 {
+			_, err := te.orderManager.ProcessLimitOrders(te.config.Symbol, currentPrice, te.paperTrader)
+			if err != nil {
+				log.Errorf("Error processing orders: %v", err)
+			}
+		}
+	}
+}
+
+// ProcessOrdersForSymbol processes limit orders for a specific symbol
+func (te *TradingEngine) ProcessOrdersForSymbol(symbol string, currentPrice float64) ([]*Order, error) {
+	return te.orderManager.ProcessLimitOrders(symbol, currentPrice, te.paperTrader)
+}
+
+// CreateLimitOrder creates a new limit order
+func (te *TradingEngine) CreateLimitOrder(symbol, side string, price, quantity float64) error {
+	log.Infof("=== CREATING LIMIT ORDER ===")
+	log.Infof("Symbol: %s, Side: %s, Price: %.8f, Quantity: %.8f", symbol, side, price, quantity)
+
+	// For SELL orders, check if position exists
+	if side == "SELL" {
+		position := te.paperTrader.GetPosition(symbol)
+		if position == nil {
+			log.Errorf("No position found for %s", symbol)
+			return fmt.Errorf("no position found for %s", symbol)
+		}
+		if quantity > position.Quantity {
+			log.Errorf("Insufficient quantity: need %.8f, have %.8f", quantity, position.Quantity)
+			return fmt.Errorf("insufficient quantity: need %.8f, have %.8f", quantity, position.Quantity)
+		}
+		log.Infof("Sell order validated: position quantity %.8f", position.Quantity)
+	}
+
+	order := &Order{
+		Symbol:   symbol,
+		Side:     side,
+		Type:     "LIMIT",
+		Price:    price,
+		Quantity: quantity,
+	}
+
+	// Reserve balance for BUY orders
+	if side == "BUY" {
+		cost := price * quantity
+		balanceBefore := te.paperTrader.GetBalance()
+		if err := te.paperTrader.ReserveBalance(cost); err != nil {
+			log.Errorf("Failed to reserve balance: %v", err)
+			return err
+		}
+		balanceAfter := te.paperTrader.GetBalance()
+		log.Infof("Balance reserved: %.2f -> %.2f USDT (reserved: %.2f)", balanceBefore, balanceAfter, cost)
+	}
+
+	err := te.orderManager.CreateOrder(order)
+	if err != nil {
+		log.Errorf("Failed to create limit order: %v", err)
+	} else {
+		log.Infof("Limit order created successfully: Order ID: %s", order.ID)
+	}
+	log.Info("=== LIMIT ORDER CREATION COMPLETE ===")
+
+	return err
+}
+
+// ExecuteMarketOrder executes a market order immediately
+func (te *TradingEngine) ExecuteMarketOrder(symbol, side string, price, quantity float64) error {
+	log.Infof("=== EXECUTING MARKET ORDER ===")
+	log.Infof("Symbol: %s, Side: %s, Price: %.8f, Quantity: %.8f", symbol, side, price, quantity)
+
+	position := &Position{
+		Symbol:     symbol,
+		Side:       side,
+		EntryPrice: price,
+		Quantity:   quantity,
+		OpenedAt:   time.Now(),
+	}
+
+	var err error
+	if side == "BUY" {
+		position.Side = "BUY"
+		err = te.paperTrader.OpenPosition(position)
+		if err != nil {
+			log.Errorf("Failed to open position for market buy order: %v", err)
+		} else {
+			log.Infof("Market buy order executed successfully")
+		}
+	} else {
+		// For selling, close existing position
+		log.Infof("Executing market sell order")
+		err = te.PlaceSellOrder(symbol, quantity, price)
+		if err != nil {
+			log.Errorf("Failed to execute market sell order: %v", err)
+		} else {
+			log.Infof("Market sell order executed successfully")
+		}
+	}
+	log.Info("=== MARKET ORDER EXECUTION COMPLETE ===")
+
+	return err
+}
+
+// CancelOrder cancels an order
+func (te *TradingEngine) CancelOrder(orderID string) error {
+	log.Infof("=== CANCELLING ORDER ===")
+	log.Infof("Order ID: %s", orderID)
+
+	order := te.orderManager.GetOrder(orderID)
+	if order == nil {
+		log.Errorf("Order not found: %s", orderID)
+		return fmt.Errorf("order not found")
+	}
+
+	log.Infof("Order details: Symbol=%s, Side=%s, Type=%s, Price=%.8f, Quantity=%.8f, Status=%s, FilledQty=%.8f",
+		order.Symbol, order.Side, order.Type, order.Price, order.Quantity, order.Status, order.FilledQty)
+
+	// Refund reserved balance for BUY orders
+	if order.Side == "BUY" && order.Status == "PENDING" {
+		refund := order.Price * (order.Quantity - order.FilledQty)
+		balanceBefore := te.paperTrader.GetBalance()
+		te.paperTrader.RefundBalance(refund)
+		balanceAfter := te.paperTrader.GetBalance()
+		log.Infof("Balance refunded: %.2f -> %.2f USDT (refund: %.2f)", balanceBefore, balanceAfter, refund)
+	}
+
+	err := te.orderManager.CancelOrder(orderID)
+	if err != nil {
+		log.Errorf("Failed to cancel order: %v", err)
+	} else {
+		log.Infof("Order %s cancelled successfully", orderID)
+	}
+	log.Info("=== ORDER CANCELLATION COMPLETE ===")
+
+	return err
+}
+
+// GetOrders returns orders
+func (te *TradingEngine) GetOrders(symbol string) []Order {
+	return te.orderManager.GetOrders(symbol)
+}
+
+// GetAllOrders returns all orders including filled and cancelled
+func (te *TradingEngine) GetAllOrders() []Order {
+	return te.orderManager.GetAllOrders()
+}
+
+func (te *TradingEngine) PlaceSellOrder(symbol string, quantity float64, price float64) error {
+	position := te.paperTrader.GetPosition(symbol)
+	if position == nil {
+		return fmt.Errorf("no position found for %s", symbol)
+	}
+
+	if quantity > position.Quantity {
+		quantity = position.Quantity
+	}
+
+	// If selling all, close position
+	if quantity >= position.Quantity {
+		_, err := te.paperTrader.ClosePosition(symbol, price, "Manual sell")
+		return err
+	}
+
+	// If selling part, we need to adjust position
+	// For simplicity, we'll close the entire position and create a new one with remaining quantity
+	_, err := te.paperTrader.ClosePosition(symbol, price, "Partial sell")
+	if err != nil {
+		return err
+	}
+
+	remainingQty := position.Quantity - quantity
+	if remainingQty > 0 {
+		newPosition := &Position{
+			Symbol:     symbol,
+			Side:       position.Side,
+			EntryPrice: position.EntryPrice,
+			Quantity:   remainingQty,
+			StopLoss:   position.StopLoss,
+			TakeProfit: position.TakeProfit,
+			OpenedAt:   time.Now(),
+		}
+		return te.paperTrader.OpenPosition(newPosition)
+	}
+
+	return nil
 }
 

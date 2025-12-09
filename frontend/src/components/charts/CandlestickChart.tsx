@@ -13,7 +13,7 @@ export function CandlestickChart() {
 
     const chart = createChart(chartContainerRef.current, {
       width: chartContainerRef.current.clientWidth,
-      height: 600,
+      height: chartContainerRef.current.clientHeight,
       layout: {
         background: { color: '#0f0f0f' },
         textColor: '#d1d5db',
@@ -43,6 +43,7 @@ export function CandlestickChart() {
       if (chartContainerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
           width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
         })
       }
     }
@@ -70,8 +71,8 @@ export function CandlestickChart() {
   }, [klines])
 
   return (
-    <div className="w-full h-full">
-      <div ref={chartContainerRef} className="w-full h-[600px]" />
+    <div className="w-full h-full min-h-0 overflow-hidden">
+      <div ref={chartContainerRef} className="w-full h-full" />
     </div>
   )
 }

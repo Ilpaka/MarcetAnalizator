@@ -5,6 +5,7 @@ import { useTrading } from '../hooks/useTrading'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { format } from 'date-fns'
+import { ru } from 'date-fns/locale'
 
 export default function Trading() {
   useTrading()
@@ -168,7 +169,7 @@ export default function Trading() {
                       {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}
                     </td>
                     <td className="py-3 px-4 text-gray-400 text-sm">
-                      {format(new Date(trade.closedAt), 'd MMM yyyy, HH:mm', { locale: require('date-fns/locale/ru') })}
+                      {format(new Date(trade.closedAt), 'd MMM yyyy, HH:mm', { locale: ru })}
                     </td>
                   </tr>
                 ))

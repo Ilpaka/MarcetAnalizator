@@ -26,7 +26,7 @@ func Load() *Config {
 		BinanceSecretKey:  getEnv("BINANCE_SECRET_KEY", ""),
 		MLServiceAddr:     getEnv("ML_SERVICE_ADDR", "localhost:50051"),
 		TwitterBearerToken: getEnv("TWITTER_BEARER_TOKEN", ""),
-		InitialBalance:    getFloatEnv("INITIAL_BALANCE", 10000.0),
+		InitialBalance:    getFloatEnv("INITIAL_BALANCE", 50000.0),
 		RiskPerTrade:      getFloatEnv("RISK_PER_TRADE", 0.02),
 		MaxPositionSize:   getFloatEnv("MAX_POSITION_SIZE", 0.1),
 		MinConfidence:     getFloatEnv("MIN_CONFIDENCE", 0.6),

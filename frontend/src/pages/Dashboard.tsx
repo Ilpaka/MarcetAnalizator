@@ -1,140 +1,130 @@
 import { useMarketStore } from '../store/marketStore'
 import { useTradingStore } from '../store/tradingStore'
 import { useMarketData } from '../hooks/useMarketData'
+import { useAllTickers } from '../hooks/useAllTickers'
 import { useTrading } from '../hooks/useTrading'
 import { Card } from '../components/ui/Card'
 import { CandlestickChart } from '../components/charts/CandlestickChart'
-import { format } from 'date-fns'
+import { MarketList } from '../components/analytics/MarketList'
+import { OrderBook } from '../components/analytics/OrderBook'
+import { TradeHistory } from '../components/analytics/TradeHistory'
+import { TradePanel } from '../components/trading/TradePanel'
+import { BarChart3 } from 'lucide-react'
+
+const TIMEFRAMES = [
+  { label: '1m', value: '1m' },
+  { label: '5m', value: '5m' },
+  { label: '15m', value: '15m' },
+  { label: '1h', value: '1h' },
+  { label: '4h', value: '4h' },
+  { label: '1d', value: '1d' },
+]
 
 export default function Dashboard() {
   useMarketData()
+  useAllTickers()
   useTrading()
 
-  const { ticker, selectedSymbol } = useMarketStore()
-  const { balance, stats, trades } = useTradingStore()
+  const { ticker, selectedSymbol, selectedTimeframe, setSelectedTimeframe, setSelectedSymbol } = useMarketStore()
+  const { balance, stats } = useTradingStore()
 
-  const recentTrades = trades.slice(-5).reverse()
+  const handleSymbolSelect = (symbol: string) => {
+    setSelectedSymbol(symbol)
+  }
 
   return (
-    <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-3xl font-bold text-white">Панель управления</h1>
-        <p className="text-gray-400 mt-1">
-          Обзор торговой производительности и рыночных условий
-        </p>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-6">
-          <div className="text-gray-400 text-sm mb-1">Общий баланс</div>
-          <div className="text-2xl font-bold text-white">
-            ${balance.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </div>
-          {stats && (
-            <div className={`text-sm mt-1 ${stats.totalPnLPercent >= 0 ? 'text-profit' : 'text-loss'}`}>
-              {stats.totalPnLPercent >= 0 ? '+' : ''}
-              {stats.totalPnLPercent.toFixed(2)}%
-            </div>
-          )}
-        </Card>
-
-        <Card className="p-6">
-          <div className="text-gray-400 text-sm mb-1">Открытые позиции</div>
-          <div className="text-2xl font-bold text-white">{stats?.totalTrades || 0}</div>
-          {stats && (
-            <div className="text-gray-400 text-sm mt-1">
-              {stats.winningTrades} прибыльных, {stats.losingTrades} убыточных
-            </div>
-          )}
-        </Card>
-
-        <Card className="p-6">
-          <div className="text-gray-400 text-sm mb-1">Прибыль/Убыток за сегодня</div>
-          {stats && (
-            <>
-              <div className={`text-2xl font-bold ${stats.totalPnL >= 0 ? 'text-profit' : 'text-loss'}`}>
-                {stats.totalPnL >= 0 ? '+' : ''}${stats.totalPnL.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className={`text-sm mt-1 ${stats.totalPnLPercent >= 0 ? 'text-profit' : 'text-loss'}`}>
-                {stats.totalPnLPercent >= 0 ? '+' : ''}
-                {stats.totalPnLPercent.toFixed(2)}%
-              </div>
-            </>
-          )}
-        </Card>
-
-        <Card className="p-6">
-          <div className="text-gray-400 text-sm mb-1">Процент побед</div>
-          <div className="text-2xl font-bold text-white">
-            {stats?.winRate.toFixed(1) || '0.0'}%
-          </div>
-          <div className="text-gray-400 text-sm mt-1">За последние 30 дней</div>
-        </Card>
-      </div>
-
-      {/* Market Price */}
-      {ticker && (
-        <Card className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-white mb-2">{selectedSymbol}</h2>
-              <div className="text-3xl font-bold text-white">
-                ${ticker.lastPrice.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className={`text-lg font-semibold ${ticker.priceChangePercent >= 0 ? 'text-profit' : 'text-loss'}`}>
+    <div className="h-full flex flex-col bg-bg-primary overflow-hidden">
+      {/* Minimal Top Bar */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-primary bg-bg-secondary flex-shrink-0">
+        <div className="flex items-center gap-3">
+          {ticker && (
+            <div className="text-xs">
+              <span className="text-gray-400">{selectedSymbol.replace('USDT', '/USDT')}</span>
+              <span className="ml-2 text-white font-semibold">${ticker.lastPrice.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className={`ml-1.5 text-[10px] ${ticker.priceChangePercent >= 0 ? 'text-profit' : 'text-loss'}`}>
                 {ticker.priceChangePercent >= 0 ? '+' : ''}
                 {ticker.priceChangePercent.toFixed(2)}%
-              </div>
-              <div className="text-sm text-gray-400 mt-1">
-                {ticker.priceChange >= 0 ? '+' : ''}
-                ${ticker.priceChange.toFixed(2)}
-              </div>
+              </span>
             </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Chart */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4 text-white">Обзор рынка</h2>
-        <CandlestickChart />
-      </Card>
-
-      {/* Recent trades */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4 text-white">Последние сделки</h2>
-        <div className="space-y-2">
-          {recentTrades.length > 0 ? (
-            recentTrades.map((trade) => (
-              <div
-                key={trade.id}
-                className="flex items-center justify-between p-4 bg-bg-tertiary rounded-lg"
-              >
-                <div>
-                  <div className="font-medium text-white">{trade.symbol}</div>
-                  <div className="text-sm text-gray-400">
-                    {format(new Date(trade.closedAt), 'd MMM, HH:mm', { locale: require('date-fns/locale/ru') })}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className={`font-medium ${trade.pnl >= 0 ? 'text-profit' : 'text-loss'}`}>
-                    {trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)}
-                  </div>
-                  <div className={`text-sm ${trade.pnlPercent >= 0 ? 'text-profit' : 'text-loss'}`}>
-                    {trade.pnlPercent >= 0 ? '+' : ''}
-                    {trade.pnlPercent.toFixed(2)}%
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-center text-gray-400 py-8">Пока нет сделок</div>
           )}
         </div>
-      </Card>
+
+        <div className="flex items-center gap-2">
+          {/* Timeframe Selector */}
+          <div className="flex items-center gap-0.5 bg-bg-tertiary rounded p-0.5">
+            {TIMEFRAMES.map((tf) => (
+              <button
+                key={tf.value}
+                onClick={() => setSelectedTimeframe(tf.value)}
+                className={`px-1.5 py-0.5 text-[10px] font-medium rounded transition-colors ${
+                  selectedTimeframe === tf.value
+                    ? 'bg-primary-600 text-white'
+                    : 'text-gray-400 hover:text-white hover:bg-bg-elevated'
+                }`}
+                tabIndex={0}
+                aria-label={`Выбрать таймфрейм ${tf.label}`}
+              >
+                {tf.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Balance */}
+          <div className="text-xs">
+            <span className="text-gray-400">Баланс:</span>
+            <span className="ml-1.5 text-white font-semibold">
+              ${balance.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            {stats && (
+              <span className={`ml-1 text-[10px] ${stats.totalPnLPercent >= 0 ? 'text-profit' : 'text-loss'}`}>
+                ({stats.totalPnLPercent >= 0 ? '+' : ''}
+                {stats.totalPnLPercent.toFixed(2)}%)
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex gap-3 p-3 overflow-hidden">
+        {/* Left Sidebar - Market List */}
+        <div className="w-72 flex-shrink-0">
+          <MarketList onSymbolSelect={handleSymbolSelect} />
+        </div>
+
+        {/* Center - Chart and Trade History */}
+        <div className="flex-1 flex flex-col gap-3 min-w-0">
+          <Card className="flex-1 p-3 flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                {selectedSymbol.replace('USDT', '/USDT')}
+              </h2>
+            </div>
+            <div className="flex-1 min-h-0">
+              <CandlestickChart />
+            </div>
+          </Card>
+
+          {/* Bottom - Trade History */}
+          <div className="h-56 flex-shrink-0">
+            <TradeHistory />
+          </div>
+        </div>
+
+        {/* Right Sidebar - Trade Panel and Order Book */}
+        <div className="w-80 flex-shrink-0 flex flex-col gap-3">
+          {/* Trade Panel */}
+          <div className="h-[520px] flex-shrink-0">
+            <TradePanel />
+          </div>
+
+          {/* Order Book */}
+          <div className="flex-1 min-h-0">
+            <OrderBook />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

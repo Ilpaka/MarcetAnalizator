@@ -95,18 +95,22 @@ func (c *Client) GetTicker24h(symbol string) (*Ticker, error) {
 	}, nil
 }
 
-// GetAllTickers retrieves all tickers
+// GetAllTickers retrieves all tickers with 24h statistics
 func (c *Client) GetAllTickers() ([]Ticker, error) {
-	prices, err := c.client.NewListPricesService().Do(c.ctx)
+	tickers, err := c.client.NewListPriceChangeStatsService().Do(c.ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]Ticker, len(prices))
-	for i, p := range prices {
+	result := make([]Ticker, len(tickers))
+	for i, t := range tickers {
 		result[i] = Ticker{
-			Symbol:    p.Symbol,
-			LastPrice: parseFloat(p.Price),
+			Symbol:             t.Symbol,
+			PriceChange:        parseFloat(t.PriceChange),
+			PriceChangePercent: parseFloat(t.PriceChangePercent),
+			LastPrice:          parseFloat(t.LastPrice),
+			Volume:             parseFloat(t.Volume),
+			QuoteVolume:        parseFloat(t.QuoteVolume),
 		}
 	}
 

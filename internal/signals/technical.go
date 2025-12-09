@@ -2,6 +2,7 @@ package signals
 
 import (
 	"crypto-trading-bot/internal/indicators"
+	"math"
 	"time"
 )
 
@@ -64,12 +65,14 @@ func CombineSignals(technicalScore, mlScore, sentimentScore float64) *Signal {
 	var direction string
 	var confidence float64
 
-	if combinedScore > 0.3 {
+	// Lower threshold to generate more signals (was 0.3, now 0.1)
+	// This allows the bot to trade more actively
+	if combinedScore > 0.1 {
 		direction = "LONG"
-		confidence = combinedScore
-	} else if combinedScore < -0.3 {
+		confidence = math.Min(combinedScore, 1.0) // Cap at 1.0
+	} else if combinedScore < -0.1 {
 		direction = "SHORT"
-		confidence = -combinedScore
+		confidence = math.Min(-combinedScore, 1.0) // Cap at 1.0
 	} else {
 		direction = "HOLD"
 		confidence = 0.0

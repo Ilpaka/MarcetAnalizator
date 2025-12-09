@@ -27,6 +27,7 @@ interface BotState {
   setTimeframes: (timeframes: string[]) => void
   setConfig: (config: Partial<BotState['config']>) => void
   setStats: (stats: BotState['stats']) => void
+  setTradingTimeframe: (timeframe: string) => void
 }
 
 export const useBotStore = create<BotState>((set) => ({
@@ -49,5 +50,6 @@ export const useBotStore = create<BotState>((set) => ({
   setTimeframes: (timeframes) => set({ timeframes }),
   setConfig: (config) => set((state) => ({ config: { ...state.config, ...config } })),
   setStats: (stats) => set({ stats }),
+  setTradingTimeframe: (timeframe) => set({ timeframes: [timeframe] }),
 }))
 

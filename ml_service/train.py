@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 print("📦 Импортирую модули...")
 
-from app.models.lstm_scratch import LSTM
-from app.preprocessing.features import (
+from models.lstm_scratch import LSTM
+from preprocessing.features import (
     create_features,
     StandardScaler,
     prepare_sequences
@@ -56,7 +56,8 @@ def train_model(symbol='BTCUSDT',
                 epochs=20,
                 batch_size=16,
                 learning_rate=0.001,
-                val_split=0.2):
+                val_split=0.2,
+                progress_callback=None):
     print("\n" + "=" * 70)
     print("🚀 НАЧИНАЮ ОБУЧЕНИЕ LSTM МОДЕЛИ")
     print("=" * 70)
@@ -140,6 +141,18 @@ def train_model(symbol='BTCUSDT',
               f"Train Loss: {avg_train_loss:.6f} | "
               f"Val Loss: {val_loss:.6f}")
 
+        # Call progress callback if provided
+        if progress_callback:
+            try:
+                progress_callback({
+                    'epoch': epoch + 1,
+                    'train_loss': float(avg_train_loss),
+                    'val_loss': float(val_loss),
+                    'completed': False
+                })
+            except Exception as e:
+                print(f"Warning: Progress callback failed: {e}")
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             patience_counter = 0
@@ -148,11 +161,35 @@ def train_model(symbol='BTCUSDT',
             patience_counter += 1
             if patience_counter >= patience:
                 print(f"\n⚠️ Early stopping на epoch {epoch + 1}")
+                if progress_callback:
+                    try:
+                        progress_callback({
+                            'epoch': epoch + 1,
+                            'train_loss': float(avg_train_loss),
+                            'val_loss': float(val_loss),
+                            'completed': True,
+                            'message': f'Early stopping at epoch {epoch + 1}'
+                        })
+                    except:
+                        pass
                 break
 
     print("\n" + "=" * 70)
     print("✅ ОБУЧЕНИЕ ЗАВЕРШЕНО!")
     print("=" * 70)
+    
+    # Final progress callback
+    if progress_callback:
+        try:
+            progress_callback({
+                'epoch': epochs,
+                'train_loss': float(train_losses[-1]) if train_losses else 0.0,
+                'val_loss': float(val_losses[-1]) if val_losses else 0.0,
+                'completed': True,
+                'message': 'Training completed successfully'
+            })
+        except:
+            pass
 
     print("\n📈 Оценка модели на валидационном сете...")
 
@@ -186,6 +223,7 @@ def train_model(symbol='BTCUSDT',
     with open(model_path, 'wb') as f:
         pickle.dump(model, f)
 
+    import time
     metadata = {
         'scaler': scaler,
         'close_scaler': close_scaler,
@@ -202,6 +240,8 @@ def train_model(symbol='BTCUSDT',
         'direction_accuracy': float(direction_accuracy),
         'train_losses': train_losses,
         'val_losses': val_losses,
+        'trained_at': int(time.time() * 1000),
+        'model_path': model_dir,
     }
 
     metadata_path = os.path.join(model_dir, 'metadata.pkl')

@@ -40,8 +40,10 @@ export function useBot() {
     try {
       await App.StartBot(symbols, timeframes)
       setIsRunning(true)
+      console.log('Bot started successfully with symbols:', symbols, 'timeframes:', timeframes)
     } catch (error) {
       console.error('Failed to start bot:', error)
+      alert('Ошибка при запуске бота: ' + (error instanceof Error ? error.message : 'Неизвестная ошибка'))
     }
   }
 

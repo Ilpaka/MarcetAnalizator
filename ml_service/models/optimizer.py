@@ -34,7 +34,8 @@ class Adam:
         updated_params = {}
 
         for key in params:
-            if key not in self.m:
+            # Check if key exists and has correct shape, reinitialize if not
+            if key not in self.m or self.m[key].shape != params[key].shape:
                 self.m[key] = np.zeros_like(params[key])
                 self.v[key] = np.zeros_like(params[key])
 

@@ -207,16 +207,27 @@ class LSTM:
                 'Wo': self.cells[layer].Wo, 'Uo': self.cells[layer].Uo, 'bo': self.cells[layer].bo
             }
 
-            updated_params = self.optimizer.update(params, all_grads[layer])
+            # Create a unique optimizer instance for each layer to avoid shape conflicts
+            # Use layer-specific keys by prefixing with layer index
+            layer_params = {f'{layer}_{key}': params[key] for key in params}
+            layer_grads = {f'{layer}_{key}': all_grads[layer][key] for key in all_grads[layer]}
+            
+            updated_layer_params = self.optimizer.update(layer_params, layer_grads)
+            
+            # Extract updated params back
+            updated_params = {key: updated_layer_params[f'{layer}_{key}'] for key in params}
 
-            for key in updated_params:
+            for key in params:
                 setattr(self.cells[layer], key, updated_params[key])
 
-        params_out = {'Wy': self.Wy, 'by': self.by}
-        grads_out = {'Wy': dWy, 'by': dby}
+        # Use unique keys for output layer to avoid conflicts
+        params_out = {'output_Wy': self.Wy, 'output_by': self.by}
+        grads_out = {'output_Wy': dWy, 'output_by': dby}
         updated_params_out = self.optimizer.update(params_out, grads_out)
-        self.Wy = updated_params_out['Wy']
-        self.by = updated_params_out['by']
+        
+        # Extract back
+        self.Wy = updated_params_out['output_Wy']
+        self.by = updated_params_out['output_by']
 
         return loss
 

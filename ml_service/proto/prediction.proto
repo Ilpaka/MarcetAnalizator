@@ -19,6 +19,15 @@ service PredictionService {
 
     // Health check
     rpc HealthCheck(Empty) returns (HealthResponse);
+
+    // Train LSTM model
+    rpc TrainModel(TrainRequest) returns (stream TrainResponse);
+
+    // Get model metadata
+    rpc GetModelMetadata(ModelMetadataRequest) returns (ModelMetadataResponse);
+
+    // Predict price (returns actual price value)
+    rpc PredictPrice(PricePredictionRequest) returns (PricePredictionResponse);
 }
 
 message Empty {}
@@ -131,4 +140,58 @@ message TweetAnalysisResponse {
     string analysis = 5;
     bool is_crypto_related = 6;
     bool is_market_related = 7;
+}
+
+message TrainRequest {
+    string symbol = 1;
+    string timeframe = 2;
+    int32 lookback = 3;          // Sequence length
+    int32 hidden_size = 4;
+    int32 num_layers = 5;
+    int32 epochs = 6;
+    int32 batch_size = 7;
+    double learning_rate = 8;
+    double val_split = 9;        // Validation split ratio
+}
+
+message TrainResponse {
+    int32 epoch = 1;
+    double train_loss = 2;
+    double val_loss = 3;
+    bool completed = 4;
+    string message = 5;
+    ModelMetadataResponse metadata = 6;
+}
+
+message ModelMetadataRequest {
+    string symbol = 1;
+    string timeframe = 2;
+}
+
+message ModelMetadataResponse {
+    bool exists = 1;
+    string symbol = 2;
+    string timeframe = 3;
+    double mae = 4;              // Mean Absolute Error
+    double rmse = 5;             // Root Mean Squared Error
+    double mape = 6;             // Mean Absolute Percentage Error
+    double direction_accuracy = 7;
+    int64 trained_at = 8;        // Timestamp
+    string model_path = 9;
+}
+
+message PricePredictionRequest {
+    string symbol = 1;
+    string timeframe = 2;
+    repeated Candle candles = 3;  // Historical candles for prediction
+}
+
+message PricePredictionResponse {
+    double predicted_price = 1;
+    double current_price = 2;
+    double confidence = 3;        // 0-1
+    double confidence_interval_lower = 4;
+    double confidence_interval_upper = 5;
+    int64 timestamp = 6;
+    string model_used = 7;
 }

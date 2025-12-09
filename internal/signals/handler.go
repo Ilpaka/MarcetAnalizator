@@ -19,7 +19,7 @@ type Signal struct {
 	TechnicalSignal float64 `json:"technicalSignal"`
 	MLSignal       float64  `json:"mlSignal"`
 	SentimentSignal float64 `json:"sentimentSignal"`
-	Timestamp      time.Time `json:"timestamp"`
+	Timestamp      time.Time `json:"timestamp" wails:"-"`
 	Reasons        []string  `json:"reasons"`
 	Model          string    `json:"model"`
 }
@@ -116,5 +116,25 @@ func (sh *SignalHandler) GetAllSignals() []*Signal {
 		signals = append(signals, sig)
 	}
 	return signals
+}
+
+func (sh *SignalHandler) GetLatestSignalForSymbol(symbol string) *Signal {
+	sh.mu.RLock()
+	defer sh.mu.RUnlock()
+
+	var latest *Signal
+	for key, sig := range sh.signals {
+		// Key format is "symbol:timeframe", so check if it starts with symbol
+		if len(key) >= len(symbol) && key[:len(symbol)] == symbol {
+			// Check if there's a colon after symbol (to match "symbol:timeframe" format)
+			if len(key) > len(symbol) && key[len(symbol)] == ':' {
+				if latest == nil || sig.Timestamp.After(latest.Timestamp) {
+					latest = sig
+				}
+			}
+		}
+	}
+
+	return latest
 }
 

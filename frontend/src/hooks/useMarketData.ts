@@ -30,6 +30,15 @@ export function useMarketData() {
         const ticker = await App.GetTicker24h(selectedSymbol)
         setTicker(ticker)
 
+        // Process limit orders when price updates
+        if (ticker && ticker.lastPrice > 0) {
+          try {
+            await App.ProcessOrdersForSymbol(selectedSymbol, ticker.lastPrice)
+          } catch (error) {
+            console.error('Error processing orders:', error)
+          }
+        }
+
         if (klines.length > 0) {
           const lastKline = klines[klines.length - 1]
           const indicators = await App.CalculateIndicators(

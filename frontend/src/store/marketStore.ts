@@ -6,6 +6,7 @@ interface MarketState {
   selectedTimeframe: string
   klines: Kline[]
   ticker: Ticker | null
+  allTickers: Ticker[]
   indicators: IndicatorValues | null
   isLoading: boolean
   error: string | null
@@ -14,6 +15,7 @@ interface MarketState {
   setSelectedTimeframe: (timeframe: string) => void
   setKlines: (klines: Kline[]) => void
   setTicker: (ticker: Ticker | null) => void
+  setAllTickers: (tickers: Ticker[]) => void
   setIndicators: (indicators: IndicatorValues | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
@@ -24,6 +26,7 @@ export const useMarketStore = create<MarketState>((set) => ({
   selectedTimeframe: '1h',
   klines: [],
   ticker: null,
+  allTickers: [],
   indicators: null,
   isLoading: false,
   error: null,
@@ -32,6 +35,7 @@ export const useMarketStore = create<MarketState>((set) => ({
   setSelectedTimeframe: (timeframe) => set({ selectedTimeframe: timeframe }),
   setKlines: (klines) => set({ klines }),
   setTicker: (ticker) => set({ ticker }),
+  setAllTickers: (tickers) => set({ allTickers: tickers }),
   setIndicators: (indicators) => set({ indicators }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),

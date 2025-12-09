@@ -29,7 +29,9 @@ frontend/package-lock.json
 
 # Python
 ml_service/__pycache__/
+ml_service/**/__pycache__/
 ml_service/*.pyc
+ml_service/**/*.pyc
 ml_service/*.pyo
 ml_service/*.pyd
 ml_service/.Python
@@ -39,6 +41,8 @@ ml_service/.venv/
 ml_service/trained_models/*.pth
 ml_service/trained_models/*.pkl
 ml_service/trained_models/*.h5
+ml_service/models/*/
+ml_service/models/**/*.pkl
 ml_service/*.pb
 ml_service/*_pb2.py
 ml_service/*_pb2_grpc.py

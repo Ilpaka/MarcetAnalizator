@@ -6,6 +6,14 @@ export function CalculateIndicators(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['CalculateIndicators'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
+export function CancelOrder(arg1) {
+  return window['go']['main']['App']['CancelOrder'](arg1);
+}
+
+export function GetAllOrders() {
+  return window['go']['main']['App']['GetAllOrders']();
+}
+
 export function GetAllTickers() {
   return window['go']['main']['App']['GetAllTickers']();
 }
@@ -20,6 +28,18 @@ export function GetBotStats() {
 
 export function GetKlines(arg1, arg2, arg3) {
   return window['go']['main']['App']['GetKlines'](arg1, arg2, arg3);
+}
+
+export function GetModelMetadata(arg1, arg2) {
+  return window['go']['main']['App']['GetModelMetadata'](arg1, arg2);
+}
+
+export function GetOrders(arg1) {
+  return window['go']['main']['App']['GetOrders'](arg1);
+}
+
+export function GetPortfolio() {
+  return window['go']['main']['App']['GetPortfolio']();
 }
 
 export function GetPositions() {
@@ -46,6 +66,22 @@ export function GetTradeHistory() {
   return window['go']['main']['App']['GetTradeHistory']();
 }
 
+export function GetTrainingStatus(arg1, arg2) {
+  return window['go']['main']['App']['GetTrainingStatus'](arg1, arg2);
+}
+
+export function PlaceOrder(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['PlaceOrder'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function PredictPrice(arg1, arg2) {
+  return window['go']['main']['App']['PredictPrice'](arg1, arg2);
+}
+
+export function ProcessOrdersForSymbol(arg1, arg2) {
+  return window['go']['main']['App']['ProcessOrdersForSymbol'](arg1, arg2);
+}
+
 export function StartBot(arg1, arg2) {
   return window['go']['main']['App']['StartBot'](arg1, arg2);
 }
@@ -56,4 +92,12 @@ export function StopBot() {
 
 export function SubscribeKline(arg1, arg2) {
   return window['go']['main']['App']['SubscribeKline'](arg1, arg2);
+}
+
+export function TrainModel(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['TrainModel'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+}
+
+export function UpdateBotConfig(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['UpdateBotConfig'](arg1, arg2, arg3, arg4, arg5);
 }

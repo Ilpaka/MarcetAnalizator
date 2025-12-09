@@ -3,11 +3,14 @@ import { useTradingStore } from '../store/tradingStore'
 // @ts-ignore
 import * as App from '../../wailsjs/go/main/App'
 
+let refreshTradingDataFn: (() => void) | null = null
+
 export function useTrading() {
   const {
     setBalance,
     setPositions,
     setTrades,
+    setOrders,
     setStats,
     setLoading,
     setError,
@@ -51,6 +54,21 @@ export function useTrading() {
           duration: t.duration,
         })))
 
+        const orders = await App.GetAllOrders()
+        setOrders(orders.map((o: any) => ({
+          id: o.id,
+          symbol: o.symbol,
+          side: o.side,
+          type: o.type,
+          price: o.price,
+          quantity: o.quantity,
+          filledQty: o.filledQty || 0,
+          status: o.status,
+          createdAt: o.createdAt ? (typeof o.createdAt === 'string' ? new Date(o.createdAt).getTime() : o.createdAt) : Date.now(),
+          filledAt: o.filledAt ? (typeof o.filledAt === 'string' ? new Date(o.filledAt).getTime() : o.filledAt) : 0,
+          cancelledAt: o.cancelledAt ? (typeof o.cancelledAt === 'string' ? new Date(o.cancelledAt).getTime() : o.cancelledAt) : 0,
+        })))
+
         const stats = await App.GetBotStats()
         setStats({
           totalValue: balance,
@@ -73,8 +91,21 @@ export function useTrading() {
     loadTradingData()
 
     const intervalId = setInterval(loadTradingData, 2000)
+    
+    // Сохраняем функцию для внешнего вызова
+    refreshTradingDataFn = loadTradingData
 
-    return () => clearInterval(intervalId)
-  }, [])
+    return () => {
+      clearInterval(intervalId)
+      refreshTradingDataFn = null
+    }
+  }, [setBalance, setPositions, setTrades, setOrders, setStats, setLoading, setError])
+}
+
+// Экспортируем функцию для обновления данных
+export const refreshTradingData = () => {
+  if (refreshTradingDataFn) {
+    refreshTradingDataFn()
+  }
 }
 
