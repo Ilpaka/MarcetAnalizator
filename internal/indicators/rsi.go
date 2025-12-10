@@ -79,22 +79,65 @@ func (r *RSI) IsOversold() bool {
 }
 
 func (r *RSI) Signal() Signal {
+	// More sensitive thresholds for scalping: 40/60 instead of 30/70
+	// Also add signals for moderate conditions
+	
+	// Strong oversold
 	if r.value <= 30 {
 		return Signal{
 			Type:      "BUY",
-			Strength:  (30 - r.value) / 30,
+			Strength:  0.9 + (30-r.value)/30*0.1, // 0.9-1.0
 			Indicator: "RSI",
-			Reason:    "Oversold condition",
+			Reason:    "Strong oversold condition",
 		}
 	}
+	// Moderate oversold - for scalping
+	if r.value <= 40 {
+		return Signal{
+			Type:      "BUY",
+			Strength:  0.5 + (40-r.value)/10*0.4, // 0.5-0.9
+			Indicator: "RSI",
+			Reason:    "Moderate oversold condition",
+		}
+	}
+	// Weak oversold - for quick scalps
+	if r.value <= 45 {
+		return Signal{
+			Type:      "BUY",
+			Strength:  0.3 + (45-r.value)/5*0.2, // 0.3-0.5
+			Indicator: "RSI",
+			Reason:    "Weak oversold condition",
+		}
+	}
+	
+	// Strong overbought
 	if r.value >= 70 {
 		return Signal{
 			Type:      "SELL",
-			Strength:  (r.value - 70) / 30,
+			Strength:  0.9 + (r.value-70)/30*0.1, // 0.9-1.0
 			Indicator: "RSI",
-			Reason:    "Overbought condition",
+			Reason:    "Strong overbought condition",
 		}
 	}
+	// Moderate overbought - for scalping
+	if r.value >= 60 {
+		return Signal{
+			Type:      "SELL",
+			Strength:  0.5 + (r.value-60)/10*0.4, // 0.5-0.9
+			Indicator: "RSI",
+			Reason:    "Moderate overbought condition",
+		}
+	}
+	// Weak overbought - for quick scalps
+	if r.value >= 55 {
+		return Signal{
+			Type:      "SELL",
+			Strength:  0.3 + (r.value-55)/5*0.2, // 0.3-0.5
+			Indicator: "RSI",
+			Reason:    "Weak overbought condition",
+		}
+	}
+	
 	return Signal{Type: "HOLD", Indicator: "RSI"}
 }
 

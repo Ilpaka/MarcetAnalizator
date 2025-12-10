@@ -65,7 +65,8 @@ export const TradingZonesChart = () => {
       },
       timeScale: {
         timeVisible: true,
-        secondsVisible: false,
+        secondsVisible: true, // Show seconds for real-time updates
+        rightOffset: 0, // Auto-scroll to latest candle
       },
       rightPriceScale: {
         borderColor: '#1a1a1a',
@@ -116,6 +117,10 @@ export const TradingZonesChart = () => {
 
     seriesRef.current.setData(data)
     updateMarkers()
+    // Auto-scroll to latest candle for real-time updates
+    if (chartRef.current) {
+      chartRef.current.timeScale().scrollToPosition(-1, false)
+    }
   }, [klines, zones])
 
   // Обновление зон на графике

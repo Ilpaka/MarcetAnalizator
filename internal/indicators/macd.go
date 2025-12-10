@@ -55,31 +55,56 @@ func (m *MACD) Histogram() float64 {
 }
 
 func (m *MACD) Signal() Signal {
-	// Bullish crossover: MACD crosses above signal
+	// More sensitive MACD signals for scalping
+	
+	// Strong bullish: MACD above signal with positive histogram
 	if m.macdLine > m.signal && m.histogram > 0 {
-		strength := m.histogram / m.signal * 10
-		if strength > 1.0 {
-			strength = 1.0
+		// Normalize strength based on histogram magnitude
+		histNorm := math.Abs(m.histogram) / (math.Abs(m.signal) + 0.0001)
+		strength := math.Min(histNorm*50, 1.0)
+		if strength < 0.3 {
+			strength = 0.3 // Minimum strength for signal
 		}
 		return Signal{
 			Type:      "BUY",
 			Strength:  strength,
 			Indicator: "MACD",
-			Reason:    "Bullish crossover",
+			Reason:    "Bullish MACD",
 		}
 	}
 
-	// Bearish crossover: MACD crosses below signal
+	// Strong bearish: MACD below signal with negative histogram
 	if m.macdLine < m.signal && m.histogram < 0 {
-		strength := math.Abs(m.histogram/m.signal) * 10
-		if strength > 1.0 {
-			strength = 1.0
+		histNorm := math.Abs(m.histogram) / (math.Abs(m.signal) + 0.0001)
+		strength := math.Min(histNorm*50, 1.0)
+		if strength < 0.3 {
+			strength = 0.3
 		}
 		return Signal{
 			Type:      "SELL",
 			Strength:  strength,
 			Indicator: "MACD",
-			Reason:    "Bearish crossover",
+			Reason:    "Bearish MACD",
+		}
+	}
+	
+	// Weak bullish: MACD above signal but histogram near zero (momentum building)
+	if m.macdLine > m.signal && m.histogram >= -0.0001 {
+		return Signal{
+			Type:      "BUY",
+			Strength:  0.25,
+			Indicator: "MACD",
+			Reason:    "MACD momentum building",
+		}
+	}
+	
+	// Weak bearish: MACD below signal but histogram near zero
+	if m.macdLine < m.signal && m.histogram <= 0.0001 {
+		return Signal{
+			Type:      "SELL",
+			Strength:  0.25,
+			Indicator: "MACD",
+			Reason:    "MACD momentum weakening",
 		}
 	}
 

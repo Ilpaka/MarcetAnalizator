@@ -22,7 +22,7 @@ from preprocessing.features import (
     prepare_sequences
 )
 
-def download_binance_data(symbol='BTCUSDT', interval='1h', limit=1000):
+def download_binance_data(symbol='BTCUSDT', interval='1h', limit=2000):
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
 
     print(f"📡 Загружаю данные {symbol} ({interval})...")
@@ -50,12 +50,12 @@ def download_binance_data(symbol='BTCUSDT', interval='1h', limit=1000):
 
 def train_model(symbol='BTCUSDT',
                 interval='1h',
-                lookback=30,
-                hidden_size=32,
-                num_layers=1,
-                epochs=20,
-                batch_size=16,
-                learning_rate=0.001,
+                lookback=60,
+                hidden_size=64,
+                num_layers=2,
+                epochs=50,
+                batch_size=32,
+                learning_rate=0.0005,
                 val_split=0.2,
                 progress_callback=None):
     print("\n" + "=" * 70)
@@ -74,18 +74,45 @@ def train_model(symbol='BTCUSDT',
 
     print("\n🔧 Подготовка данных...")
 
+    # Use returns (percentage change) as target instead of absolute price
+    # This makes the model predict price movement, not absolute price
+    returns = df_features['returns'].values
+    
+    # Calculate forward returns (next period return) - what we want to predict
+    # For each time t, we predict return at t+1
+    forward_returns = np.concatenate([returns[1:], [returns[-1]]])  # Shift by 1, use last for final
+    
+    # Normalize returns for better training
+    returns_scaler = StandardScaler()
+    # Fit on all returns (both current and forward)
+    all_returns = np.concatenate([returns, forward_returns])
+    returns_scaler.fit(all_returns.reshape(-1, 1))
+    
+    returns_normalized = returns_scaler.transform(returns.reshape(-1, 1)).flatten()
+    forward_returns_normalized = returns_scaler.transform(forward_returns.reshape(-1, 1)).flatten()
+    
+    # Prepare features
     scaler = StandardScaler()
     X_data = scaler.fit_transform(df_features[feature_cols].values)
-
+    
+    # Add normalized close price and returns as features
     close_scaler = StandardScaler()
     close_values = df_features['close'].values.reshape(-1, 1)
     close_scaler.fit(close_values)
-
     close_normalized = close_scaler.transform(close_values).flatten()
-    X_data = np.column_stack([close_normalized, X_data])
-
-    X, y = prepare_sequences(X_data, target_col_idx=0,
-                            lookback=lookback, forecast_horizon=1)
+    
+    # Stack: [close_normalized, returns_normalized, ...features]
+    X_data = np.column_stack([close_normalized, returns_normalized, X_data])
+    
+    # Prepare sequences
+    # For each sequence ending at time t, predict return at t+1
+    X, y = [], []
+    for i in range(lookback, len(X_data) - 1):  # -1 because we need next return
+        X.append(X_data[i - lookback:i])
+        y.append(forward_returns_normalized[i])  # Predict return at i+1
+    
+    X = np.array(X)
+    y = np.array(y).reshape(-1, 1)
 
     split_idx = int(len(X) * (1 - val_split))
     X_train, X_val = X[:split_idx], X[split_idx:]
@@ -193,21 +220,39 @@ def train_model(symbol='BTCUSDT',
 
     print("\n📈 Оценка модели на валидационном сете...")
 
-    y_val_pred = model.predict(X_val)
+    y_val_pred_normalized = model.predict(X_val)
+    
+    # Inverse transform returns to get actual returns
+    y_val_real_returns = returns_scaler.inverse_transform(y_val.reshape(-1, 1)).flatten()
+    y_val_pred_returns = returns_scaler.inverse_transform(y_val_pred_normalized.reshape(-1, 1)).flatten()
+    
+    # Convert returns to prices for evaluation
+    # Get last close prices from validation set
+    val_start_idx = split_idx
+    val_close_prices = df_features['close'].iloc[val_start_idx:val_start_idx + len(y_val_real_returns)].values
+    
+    # Calculate predicted prices from returns
+    y_val_real_prices = val_close_prices * (1 + y_val_real_returns)
+    y_val_pred_prices = val_close_prices * (1 + y_val_pred_returns)
+    
+    # Calculate metrics on prices
+    mae = np.mean(np.abs(y_val_real_prices - y_val_pred_prices))
+    rmse = np.sqrt(np.mean((y_val_real_prices - y_val_pred_prices) ** 2))
+    mape = np.mean(np.abs((y_val_real_prices - y_val_pred_prices) / (y_val_real_prices + 1e-8))) * 100
+    
+    # Calculate return prediction accuracy
+    return_mae = np.mean(np.abs(y_val_real_returns - y_val_pred_returns))
+    return_rmse = np.sqrt(np.mean((y_val_real_returns - y_val_pred_returns) ** 2))
 
-    y_val_real = close_scaler.inverse_transform(y_val)
-    y_val_pred_real = close_scaler.inverse_transform(y_val_pred.reshape(-1, 1))
+    print(f"Price MAE:  ${mae:.2f}")
+    print(f"Price RMSE: ${rmse:.2f}")
+    print(f"Price MAPE: {mape:.2f}%")
+    print(f"Return MAE: {return_mae*100:.4f}%")
+    print(f"Return RMSE: {return_rmse*100:.4f}%")
 
-    mae = np.mean(np.abs(y_val_real - y_val_pred_real))
-    rmse = np.sqrt(np.mean((y_val_real - y_val_pred_real) ** 2))
-    mape = np.mean(np.abs((y_val_real - y_val_pred_real) / (y_val_real + 1e-8))) * 100
-
-    print(f"MAE:  ${mae:.2f}")
-    print(f"RMSE: ${rmse:.2f}")
-    print(f"MAPE: {mape:.2f}%")
-
-    y_val_direction = np.sign(np.diff(y_val_real.flatten()))
-    y_pred_direction = np.sign(np.diff(y_val_pred_real.flatten()))
+    # Direction accuracy based on returns
+    y_val_direction = np.sign(y_val_real_returns)
+    y_pred_direction = np.sign(y_val_pred_returns)
     direction_accuracy = np.mean(y_val_direction == y_pred_direction) * 100
 
     print(f"Direction Accuracy: {direction_accuracy:.2f}%")
@@ -227,6 +272,7 @@ def train_model(symbol='BTCUSDT',
     metadata = {
         'scaler': scaler,
         'close_scaler': close_scaler,
+        'returns_scaler': returns_scaler,  # New: scaler for returns
         'feature_cols': feature_cols,
         'lookback': lookback,
         'input_size': input_size,
@@ -237,11 +283,14 @@ def train_model(symbol='BTCUSDT',
         'mae': float(mae),
         'rmse': float(rmse),
         'mape': float(mape),
+        'return_mae': float(return_mae),
+        'return_rmse': float(return_rmse),
         'direction_accuracy': float(direction_accuracy),
         'train_losses': train_losses,
         'val_losses': val_losses,
         'trained_at': int(time.time() * 1000),
         'model_path': model_dir,
+        'predicts_returns': True,  # Flag indicating model predicts returns, not prices
     }
 
     metadata_path = os.path.join(model_dir, 'metadata.pkl')

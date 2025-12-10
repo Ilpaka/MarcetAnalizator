@@ -91,23 +91,65 @@ func (bb *BollingerBands) Bandwidth() float64 {
 func (bb *BollingerBands) Signal(price float64) Signal {
 	percentB := bb.PercentB(price)
 
-	// Price near or below lower band - potential buy
+	// More sensitive thresholds for scalping
+	
+	// Strong buy: Price at or below lower band
 	if percentB <= 0.05 {
 		return Signal{
 			Type:      "BUY",
-			Strength:  1 - percentB*20,
+			Strength:  0.9 + (0.05-percentB)*2, // 0.9-1.0
 			Indicator: "BollingerBands",
 			Reason:    "Price at lower band",
 		}
 	}
+	
+	// Moderate buy: Price in lower 20% of band
+	if percentB <= 0.20 {
+		return Signal{
+			Type:      "BUY",
+			Strength:  0.5 + (0.20-percentB)/0.15*0.4, // 0.5-0.9
+			Indicator: "BollingerBands",
+			Reason:    "Price in lower band region",
+		}
+	}
+	
+	// Weak buy: Price in lower 35% of band
+	if percentB <= 0.35 {
+		return Signal{
+			Type:      "BUY",
+			Strength:  0.3 + (0.35-percentB)/0.15*0.2, // 0.3-0.5
+			Indicator: "BollingerBands",
+			Reason:    "Price approaching lower band",
+		}
+	}
 
-	// Price near or above upper band - potential sell
+	// Strong sell: Price at or above upper band
 	if percentB >= 0.95 {
 		return Signal{
 			Type:      "SELL",
-			Strength:  (percentB - 0.95) * 20,
+			Strength:  0.9 + (percentB-0.95)*2, // 0.9-1.0
 			Indicator: "BollingerBands",
 			Reason:    "Price at upper band",
+		}
+	}
+	
+	// Moderate sell: Price in upper 20% of band
+	if percentB >= 0.80 {
+		return Signal{
+			Type:      "SELL",
+			Strength:  0.5 + (percentB-0.80)/0.15*0.4, // 0.5-0.9
+			Indicator: "BollingerBands",
+			Reason:    "Price in upper band region",
+		}
+	}
+	
+	// Weak sell: Price in upper 35% of band
+	if percentB >= 0.65 {
+		return Signal{
+			Type:      "SELL",
+			Strength:  0.3 + (percentB-0.65)/0.15*0.2, // 0.3-0.5
+			Indicator: "BollingerBands",
+			Reason:    "Price approaching upper band",
 		}
 	}
 

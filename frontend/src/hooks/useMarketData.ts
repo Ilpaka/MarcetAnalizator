@@ -66,7 +66,8 @@ export function useMarketData() {
         .catch((err: Error) => setError(err.message))
     }
 
-    intervalId = window.setInterval(loadData, 5000)
+    // Update every 1 second for real-time chart movement
+    intervalId = window.setInterval(loadData, 1000)
 
     return () => {
       if (intervalId !== null) {

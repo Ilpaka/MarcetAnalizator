@@ -38,6 +38,16 @@ func CalculateTechnicalScore(indicatorSignals []indicators.Signal) float64 {
 			weight = 1.1
 		case "EMA":
 			weight = 1.3
+		case "ADX":
+			weight = 1.4 // Strong trend indicator
+		case "CCI":
+			weight = 1.1
+		case "Williams%R":
+			weight = 1.0
+		case "Momentum":
+			weight = 1.2
+		case "OBV":
+			weight = 0.9
 		}
 
 		totalScore += score * weight
@@ -52,10 +62,11 @@ func CalculateTechnicalScore(indicatorSignals []indicators.Signal) float64 {
 }
 
 func CombineSignals(technicalScore, mlScore, sentimentScore float64) *Signal {
+	// For scalping, prioritize technical analysis
 	weights := map[string]float64{
-		"technical": 0.4,
-		"ml":         0.4,
-		"sentiment":  0.2,
+		"technical": 0.6, // Increased weight for technical signals
+		"ml":         0.3,
+		"sentiment":  0.1,
 	}
 
 	combinedScore := technicalScore*weights["technical"] +
@@ -65,14 +76,24 @@ func CombineSignals(technicalScore, mlScore, sentimentScore float64) *Signal {
 	var direction string
 	var confidence float64
 
-	// Lower threshold to generate more signals (was 0.3, now 0.1)
-	// This allows the bot to trade more actively
-	if combinedScore > 0.1 {
+	// Much lower threshold for scalping - allow small profits
+	// Threshold reduced from 0.1 to 0.05 for more frequent trading
+	scalpingThreshold := 0.05
+	
+	if combinedScore > scalpingThreshold {
 		direction = "LONG"
-		confidence = math.Min(combinedScore, 1.0) // Cap at 1.0
-	} else if combinedScore < -0.1 {
+		// Boost confidence for scalping - even small signals can be profitable
+		confidence = math.Min(combinedScore*1.2, 1.0) // Boost by 20%
+		// Ensure minimum confidence for trading
+		if confidence < 0.3 {
+			confidence = 0.3
+		}
+	} else if combinedScore < -scalpingThreshold {
 		direction = "SHORT"
-		confidence = math.Min(-combinedScore, 1.0) // Cap at 1.0
+		confidence = math.Min(-combinedScore*1.2, 1.0) // Boost by 20%
+		if confidence < 0.3 {
+			confidence = 0.3
+		}
 	} else {
 		direction = "HOLD"
 		confidence = 0.0

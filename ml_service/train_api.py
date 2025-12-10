@@ -1,6 +1,10 @@
 """
 HTTP API for training and prediction
 Simple Flask API to handle training requests and predictions
+
+NOTE: This file is kept for backward compatibility.
+The recommended way is to use main.py which runs both HTTP and gRPC APIs together.
+Run: python main.py
 """
 import os
 import sys

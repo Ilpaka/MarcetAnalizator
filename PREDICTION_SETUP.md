@@ -8,7 +8,9 @@
 
 - **Frontend**: React страница "Тестирование предсказаний" (`PredictionTesting.tsx`)
 - **Go Backend**: Методы `TrainModel`, `GetModelMetadata`, `PredictPrice` в `app.go`
-- **Python ML Service**: HTTP API (`train_api.py`) на порту 5000
+- **Python ML Service**: Объединенный сервис (`main.py`) с поддержкой:
+  - HTTP API на порту 5000 (для обучения моделей)
+  - gRPC API на порту 50051 (для предсказаний и анализа)
 - **LSTM Model**: Кастомная реализация в `ml_service/models/lstm_scratch.py`
 
 ## Установка
@@ -20,14 +22,16 @@ cd ml_service
 pip install -r requirements.txt
 ```
 
-### 2. Запустите ML Training API
+### 2. Запустите ML Service
 
 ```bash
 cd ml_service
-python train_api.py
+python main.py
 ```
 
-API будет доступен на `http://localhost:5000`
+Сервис запустит оба API:
+- HTTP API будет доступен на `http://localhost:5000`
+- gRPC API будет доступен на `localhost:50051`
 
 ### 3. Запустите основное приложение
 
@@ -45,13 +49,26 @@ wails dev
 
 ## API Endpoints
 
-### Python ML Service (HTTP)
+### Python ML Service
+
+#### HTTP API (порт 5000)
 
 - `POST /train` - Запустить обучение модели
 - `GET /model_metadata/<symbol>/<timeframe>` - Получить метаданные модели
 - `POST /predict` - Предсказать цену
 - `GET /training_status/<symbol>/<timeframe>` - Статус обучения
 - `GET /health` - Проверка здоровья сервиса
+
+#### gRPC API (порт 50051)
+
+- `TrainModel` - Обучение модели (streaming)
+- `GetModelMetadata` - Получить метаданные модели
+- `PredictPrice` - Предсказать цену
+- `Predict` - Предсказание направления (ensemble)
+- `PredictMultiTimeframe` - Предсказания для нескольких таймфреймов
+- `AnalyzeSentiment` - Анализ тональности текста
+- `AnalyzeTrumpTweet` - Анализ твитов Трампа
+- `HealthCheck` - Проверка здоровья сервиса
 
 ### Go Backend (Wails)
 

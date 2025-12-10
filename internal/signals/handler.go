@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 type Signal struct {
@@ -52,6 +53,10 @@ func (sh *SignalHandler) UpdateSignal(signal *Signal) {
 
 	key := signal.Symbol + ":" + signal.Timeframe
 	sh.signals[key] = signal
+	
+	// Log signal update for debugging
+	log.Debugf("SignalHandler: Updated signal %s -> %s:%s %s (confidence=%.2f%%)", 
+		key, signal.Symbol, signal.Timeframe, signal.Direction, signal.Confidence*100)
 
 	for _, ch := range sh.subscribers {
 		select {

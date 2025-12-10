@@ -113,15 +113,28 @@ class LSTMPredictor:
             # 3. Normalization
             scaler = self.metadata.get('scaler')
             close_scaler = self.metadata.get('close_scaler')
+            returns_scaler = self.metadata.get('returns_scaler')
+            predicts_returns = self.metadata.get('predicts_returns', False)
             
             if not scaler or not close_scaler:
                 logger.warning("Scalers not found in metadata, using mock prediction")
                 return self._mock_prediction(candles, sentiment_score)
             
+            # Prepare features
             X_data = scaler.transform(df_features[feature_cols].values)
             close_values = df_features['close'].values.reshape(-1, 1)
             close_normalized = close_scaler.transform(close_values).flatten()
-            X_data = np.column_stack([close_normalized, X_data])
+            
+            # Calculate returns
+            returns = df_features['returns'].values
+            if returns_scaler:
+                returns_normalized = returns_scaler.transform(returns.reshape(-1, 1)).flatten()
+            else:
+                # Fallback: normalize returns manually
+                returns_normalized = (returns - np.mean(returns)) / (np.std(returns) + 1e-8)
+            
+            # Stack features: [close_normalized, returns_normalized, ...features]
+            X_data = np.column_stack([close_normalized, returns_normalized, X_data])
             
             # 4. Sequence preparation
             lookback = self.metadata.get('lookback', 60)
@@ -141,18 +154,47 @@ class LSTMPredictor:
             if predicted_normalized.ndim > 1:
                 predicted_normalized = predicted_normalized.flatten()
             
-            # Inverse transform
-            predicted_price = close_scaler.inverse_transform(predicted_normalized.reshape(-1, 1)).flatten()[0]
-            
             current_price = df['close'].iloc[-1]
-            price_change = ((predicted_price - current_price) / current_price) * 100
             
-            logger.info(f"Prediction: current={current_price:.2f}, predicted={predicted_price:.2f}, change={price_change:.4f}%")
+            # Check if model predicts returns or prices
+            if predicts_returns and returns_scaler:
+                # Model predicts returns (percentage change)
+                predicted_return_normalized = predicted_normalized[0]
+                predicted_return = returns_scaler.inverse_transform(
+                    predicted_return_normalized.reshape(-1, 1)
+                ).flatten()[0]
+                
+                # Apply clipping to prevent extreme predictions
+                # Clip returns to reasonable range (±5% per period)
+                predicted_return = np.clip(predicted_return, -0.05, 0.05)
+                
+                # Calculate predicted price from return
+                predicted_price = current_price * (1 + predicted_return)
+                price_change = predicted_return * 100
+                
+                logger.info(f"Return-based prediction: current={current_price:.2f}, "
+                          f"predicted_return={predicted_return*100:.4f}%, "
+                          f"predicted_price={predicted_price:.2f}")
+            else:
+                # Legacy: model predicts absolute price
+                predicted_price = close_scaler.inverse_transform(
+                    predicted_normalized.reshape(-1, 1)
+                ).flatten()[0]
+                
+                # Ensure predicted price is reasonable (within ±10% of current)
+                predicted_price = np.clip(predicted_price, current_price * 0.9, current_price * 1.1)
+                
+                price_change = ((predicted_price - current_price) / current_price) * 100
+                
+                logger.info(f"Price-based prediction: current={current_price:.2f}, "
+                          f"predicted={predicted_price:.2f}, change={price_change:.4f}%")
             
-            # Determine direction
-            if price_change > 0.1:
+            # Determine direction with better thresholds
+            # Use smaller threshold for return-based predictions
+            threshold = 0.05 if predicts_returns else 0.1
+            if price_change > threshold:
                 direction = 'UP'
-            elif price_change < -0.1:
+            elif price_change < -threshold:
                 direction = 'DOWN'
             else:
                 direction = 'NEUTRAL'
@@ -162,10 +204,25 @@ class LSTMPredictor:
             rmse = self.metadata.get('rmse', 0.0)
             direction_accuracy = self.metadata.get('direction_accuracy', 0.0)
             
-            # Confidence is based on direction accuracy and inverse of error
-            base_confidence = direction_accuracy / 100.0
-            error_factor = 1.0 / (1.0 + (rmse / current_price) if current_price > 0 else 1.0)
-            confidence = min(base_confidence * error_factor, 0.95)
+            # For return-based predictions, use return metrics
+            if predicts_returns:
+                return_rmse = self.metadata.get('return_rmse', rmse / current_price if current_price > 0 else 0.01)
+                # Confidence based on direction accuracy and prediction magnitude
+                base_confidence = direction_accuracy / 100.0
+                # Higher confidence if prediction is significant
+                magnitude_factor = min(abs(price_change) / 0.5, 1.0)  # Normalize to 0.5% change
+                # Lower confidence if error is high relative to prediction
+                error_factor = 1.0 / (1.0 + (return_rmse * 100 / max(abs(price_change), 0.1)))
+                confidence = min(base_confidence * error_factor * (0.7 + 0.3 * magnitude_factor), 0.95)
+            else:
+                # Legacy: price-based confidence
+                base_confidence = direction_accuracy / 100.0
+                error_factor = 1.0 / (1.0 + (rmse / current_price) if current_price > 0 else 1.0)
+                confidence = min(base_confidence * error_factor, 0.95)
+            
+            # Ensure minimum confidence for meaningful predictions
+            if abs(price_change) > 0.1:
+                confidence = max(confidence, 0.5)
             
             logger.info(f"LSTM Prediction: current={current_price:.2f}, predicted={predicted_price:.2f}, change={price_change:.2f}%")
             

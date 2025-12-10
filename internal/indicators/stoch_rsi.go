@@ -69,23 +69,65 @@ func (s *StochRSI) Values() (k, d float64) {
 }
 
 func (s *StochRSI) Signal() Signal {
-	// Oversold: K < 20
+	// More sensitive thresholds for scalping
+	
+	// Strong oversold
 	if s.k < 20 {
 		return Signal{
 			Type:      "BUY",
-			Strength:  (20 - s.k) / 20,
+			Strength:  0.9 + (20-s.k)/20*0.1, // 0.9-1.0
 			Indicator: "StochRSI",
-			Reason:    "Oversold condition",
+			Reason:    "Strong oversold condition",
+		}
+	}
+	
+	// Moderate oversold
+	if s.k < 30 {
+		return Signal{
+			Type:      "BUY",
+			Strength:  0.6 + (30-s.k)/10*0.3, // 0.6-0.9
+			Indicator: "StochRSI",
+			Reason:    "Moderate oversold condition",
+		}
+	}
+	
+	// Weak oversold
+	if s.k < 40 {
+		return Signal{
+			Type:      "BUY",
+			Strength:  0.3 + (40-s.k)/10*0.3, // 0.3-0.6
+			Indicator: "StochRSI",
+			Reason:    "Weak oversold condition",
 		}
 	}
 
-	// Overbought: K > 80
+	// Strong overbought
 	if s.k > 80 {
 		return Signal{
 			Type:      "SELL",
-			Strength:  (s.k - 80) / 20,
+			Strength:  0.9 + (s.k-80)/20*0.1, // 0.9-1.0
 			Indicator: "StochRSI",
-			Reason:    "Overbought condition",
+			Reason:    "Strong overbought condition",
+		}
+	}
+	
+	// Moderate overbought
+	if s.k > 70 {
+		return Signal{
+			Type:      "SELL",
+			Strength:  0.6 + (s.k-70)/10*0.3, // 0.6-0.9
+			Indicator: "StochRSI",
+			Reason:    "Moderate overbought condition",
+		}
+	}
+	
+	// Weak overbought
+	if s.k > 60 {
+		return Signal{
+			Type:      "SELL",
+			Strength:  0.3 + (s.k-60)/10*0.3, // 0.3-0.6
+			Indicator: "StochRSI",
+			Reason:    "Weak overbought condition",
 		}
 	}
 

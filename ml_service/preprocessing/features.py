@@ -147,6 +147,38 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
 
     df['high_low_range'] = (high - low) / (close + 1e-10)
     df['close_open_range'] = (df['close'].values - df['open'].values) / (df['open'].values + 1e-10)
+    
+    # Momentum indicators
+    for period in [5, 10, 20]:
+        momentum = np.zeros(len(close))
+        for i in range(period, len(close)):
+            momentum[i] = (close[i] - close[i - period]) / close[i - period]
+        df[f'momentum_{period}'] = momentum
+    
+    # Rate of Change (ROC)
+    for period in [5, 10, 20]:
+        roc = np.zeros(len(close))
+        for i in range(period, len(close)):
+            roc[i] = ((close[i] - close[i - period]) / close[i - period]) * 100
+        df[f'roc_{period}'] = roc
+    
+    # Price position in range
+    for window in [10, 20, 50]:
+        price_position = np.zeros(len(close))
+        for i in range(window, len(close)):
+            window_high = np.max(high[i - window:i])
+            window_low = np.min(low[i - window:i])
+            if window_high > window_low:
+                price_position[i] = (close[i] - window_low) / (window_high - window_low)
+        df[f'price_position_{window}'] = price_position
+    
+    # Trend strength
+    for period in [10, 20]:
+        trend_strength = np.zeros(len(close))
+        for i in range(period, len(close)):
+            window_returns = df['returns'].values[i - period:i]
+            trend_strength[i] = np.sum(np.sign(window_returns)) / period
+        df[f'trend_strength_{period}'] = trend_strength
 
     for lag in [1, 2, 3, 5, 10]:
         df[f'close_lag_{lag}'] = np.concatenate([np.full(lag, np.nan), close[:-lag]])

@@ -69,6 +69,10 @@ export namespace indicators {
 	    stochRsiK: number;
 	    stochRsiD: number;
 	    obv: number;
+	    adx: number;
+	    cci: number;
+	    williams: number;
+	    momentum: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new IndicatorValues(source);
@@ -93,6 +97,10 @@ export namespace indicators {
 	        this.stochRsiK = source["stochRsiK"];
 	        this.stochRsiD = source["stochRsiD"];
 	        this.obv = source["obv"];
+	        this.adx = source["adx"];
+	        this.cci = source["cci"];
+	        this.williams = source["williams"];
+	        this.momentum = source["momentum"];
 	    }
 	}
 	export class Signal {

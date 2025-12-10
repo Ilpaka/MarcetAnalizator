@@ -264,7 +264,9 @@ func (te *TradingEngine) handleExistingPosition(signal *signals.Signal) {
 		return
 	}
 
-	if signal.Direction != position.Side && signal.Confidence > 0.7 {
+	// For scalping: more aggressive reversal (lower threshold)
+	// Close position if opposite signal with moderate confidence
+	if signal.Direction != position.Side && signal.Confidence > 0.5 {
 		te.closePosition(position, "Signal reversal")
 		te.openPosition(signal)
 		return
@@ -273,14 +275,22 @@ func (te *TradingEngine) handleExistingPosition(signal *signals.Signal) {
 	currentPrice := signal.Price
 	pnlPercent := te.calculatePnLPercent(position, currentPrice)
 
-	if pnlPercent > 1.0 {
+	// For scalping: move stop to breakeven faster (0.5% instead of 1.0%)
+	if pnlPercent > 0.5 {
 		if position.Side == "LONG" && position.StopLoss < position.EntryPrice {
 			position.StopLoss = position.EntryPrice
-			log.Info("Stop loss moved to breakeven")
+			log.Info("Stop loss moved to breakeven (scalping)")
 		} else if position.Side == "SHORT" && position.StopLoss > position.EntryPrice {
 			position.StopLoss = position.EntryPrice
-			log.Info("Stop loss moved to breakeven")
+			log.Info("Stop loss moved to breakeven (scalping)")
 		}
+	}
+	
+	// For scalping: take profit earlier if we have small profit
+	// Close position if we have 0.3% profit and signal is weakening
+	if pnlPercent > 0.3 && signal.Confidence < 0.4 {
+		te.closePosition(position, "Quick profit taken (scalping)")
+		return
 	}
 }
 
@@ -340,13 +350,25 @@ func (te *TradingEngine) isTakeProfitHit(pos *Position, price float64) bool {
 func (te *TradingEngine) calculateStopLoss(signal *signals.Signal) float64 {
 	atr := signal.ATR
 	if atr == 0 {
+		// For scalping, use tighter stop loss
 		atr = signal.Price * te.config.DefaultStopLoss / 100
 	}
 
-	if signal.Direction == "LONG" {
-		return signal.Price - 2*atr
+	// For scalping: tighter stops (1.5x ATR instead of 2x)
+	// This allows for smaller profits but more frequent trades
+	stopMultiplier := 1.5
+	
+	// Adjust based on confidence - higher confidence = tighter stop
+	if signal.Confidence > 0.7 {
+		stopMultiplier = 1.2 // Very tight for high confidence
+	} else if signal.Confidence < 0.4 {
+		stopMultiplier = 1.8 // Slightly wider for low confidence
 	}
-	return signal.Price + 2*atr
+
+	if signal.Direction == "LONG" {
+		return signal.Price - stopMultiplier*atr
+	}
+	return signal.Price + stopMultiplier*atr
 }
 
 func (te *TradingEngine) calculateTakeProfit(signal *signals.Signal) float64 {
@@ -355,10 +377,21 @@ func (te *TradingEngine) calculateTakeProfit(signal *signals.Signal) float64 {
 		atr = signal.Price * te.config.DefaultTakeProfit / 100
 	}
 
-	if signal.Direction == "LONG" {
-		return signal.Price + 3*atr
+	// For scalping: smaller take profit (1.5-2x ATR instead of 3x)
+	// Target smaller profits more frequently
+	tpMultiplier := 1.5
+	
+	// Adjust based on confidence
+	if signal.Confidence > 0.7 {
+		tpMultiplier = 2.0 // Higher target for high confidence
+	} else if signal.Confidence < 0.4 {
+		tpMultiplier = 1.2 // Lower target for low confidence (quick profit)
 	}
-	return signal.Price - 3*atr
+
+	if signal.Direction == "LONG" {
+		return signal.Price + tpMultiplier*atr
+	}
+	return signal.Price - tpMultiplier*atr
 }
 
 func (te *TradingEngine) calculatePnLPercent(pos *Position, currentPrice float64) float64 {

@@ -29,7 +29,7 @@ func Load() *Config {
 		InitialBalance:    getFloatEnv("INITIAL_BALANCE", 50000.0),
 		RiskPerTrade:      getFloatEnv("RISK_PER_TRADE", 0.02),
 		MaxPositionSize:   getFloatEnv("MAX_POSITION_SIZE", 0.1),
-		MinConfidence:     getFloatEnv("MIN_CONFIDENCE", 0.6),
+		MinConfidence:     getFloatEnv("MIN_CONFIDENCE", 0.3), // Lowered for scalping
 		MaxDailyTrades:    getIntEnv("MAX_DAILY_TRADES", 10),
 		CooldownMinutes:   getIntEnv("COOLDOWN_MINUTES", 5),
 		DatabasePath:      getEnv("DATABASE_PATH", "./trading.db"),

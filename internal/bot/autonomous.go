@@ -54,8 +54,8 @@ func NewAutonomousBotWithWS(config *BotConfig, wsClient *binance.WSClient) *Auto
 		InitialBalance:    config.InitialBalance,
 		MaxPositionSize:   config.MaxPositionSize,
 		RiskPerTrade:      config.RiskPerTrade,
-		DefaultStopLoss:   0.02,
-		DefaultTakeProfit: 0.04,
+		DefaultStopLoss:   0.01,   // Tighter stop for scalping
+		DefaultTakeProfit: 0.02,   // Smaller target for scalping
 		MinConfidence:     config.MinConfidence,
 		MaxDailyTrades:    config.MaxDailyTrades,
 		CooldownMinutes:   config.CooldownMinutes,
@@ -161,11 +161,20 @@ func (bot *AutonomousBot) loadHistoricalData() error {
 			bot.candleBuffers[key] = klines
 
 			indicatorSet := bot.indicatorMgr.GetOrCreate(symbol, tf)
+			var lastValues *indicators.IndicatorValues
 			for _, k := range klines {
-				indicatorSet.UpdateAll(k.High, k.Low, k.Close, k.Volume)
+				lastValues = indicatorSet.UpdateAll(k.High, k.Low, k.Close, k.Volume)
+				// Update last price
+				bot.lastPrices[symbol] = k.Close
 			}
 
 			log.Infof("Loaded %d candles for %s %s", len(klines), symbol, tf)
+			
+			// Generate initial signal after loading historical data
+			if len(klines) >= 60 && lastValues != nil {
+				log.Infof("Generating initial signal for %s %s after loading historical data", symbol, tf)
+				bot.generateSignal(symbol, tf, lastValues)
+			}
 		}
 	}
 
@@ -228,9 +237,18 @@ func (bot *AutonomousBot) processKline(symbol, timeframe string, msg *binance.Kl
 		bot.candleBuffers[key] = bot.candleBuffers[key][1:]
 	}
 
-	log.Debugf("Candle buffer size: %d", len(bot.candleBuffers[key]))
+	log.Debugf("Candle buffer size: %d for %s, IsFinal=%v", len(bot.candleBuffers[key]), key, msg.Kline.IsFinal)
 
-	go bot.generateSignal(symbol, timeframe, values)
+	// Generate signal synchronously for final candles to ensure it's processed immediately
+	// Also generate for non-final candles if we have enough data (for real-time trading)
+	if msg.Kline.IsFinal {
+		log.Debugf("Final candle received, generating signal for %s %s", symbol, timeframe)
+		bot.generateSignal(symbol, timeframe, values)
+	} else if len(bot.candleBuffers[key]) >= 60 {
+		// Generate signal even for non-final candles if we have enough data
+		log.Debugf("Non-final candle but enough data, generating signal for %s %s", symbol, timeframe)
+		bot.generateSignal(symbol, timeframe, values)
+	}
 }
 
 func (bot *AutonomousBot) generateSignal(symbol, timeframe string, indicatorValues *indicators.IndicatorValues) {
@@ -238,15 +256,17 @@ func (bot *AutonomousBot) generateSignal(symbol, timeframe string, indicatorValu
 	candles := bot.candleBuffers[key]
 
 	if len(candles) < 60 {
-		log.Debugf("Not enough candles for %s %s: %d < 60", symbol, timeframe, len(candles))
+		log.Debugf("⚠️ Not enough candles for %s %s: %d < 60", symbol, timeframe, len(candles))
 		return
 	}
 
 	currentPrice := bot.lastPrices[symbol]
 	if currentPrice == 0 {
-		log.Debugf("No price data for %s", symbol)
+		log.Debugf("⚠️ No price data for %s", symbol)
 		return
 	}
+	
+	log.Debugf("🔍 Generating signal for %s %s: candles=%d, price=%.2f", symbol, timeframe, len(candles), currentPrice)
 
 	indicatorSet := bot.indicatorMgr.GetOrCreate(symbol, timeframe)
 	techSignals := indicatorSet.GetSignals(currentPrice)
@@ -293,9 +313,26 @@ func (bot *AutonomousBot) generateSignal(symbol, timeframe string, indicatorValu
 		log.Debugf("No technical signals generated")
 	}
 	
-	log.Info("=== SIGNAL GENERATION COMPLETE ===")
-
+	// Always update signal, even if HOLD - this ensures signal handler has latest data
 	bot.signalHandler.UpdateSignal(combinedSignal)
+	
+	// Verify signal was saved
+	savedSignal := bot.signalHandler.GetSignal(symbol, timeframe)
+	if savedSignal != nil {
+		log.Debugf("✅ Signal saved successfully: %s:%s -> %s (confidence=%.2f%%)", 
+			symbol, timeframe, savedSignal.Direction, savedSignal.Confidence*100)
+	} else {
+		log.Warnf("⚠️ Signal was NOT saved! Check signal handler")
+	}
+	
+	// Log if signal is actionable
+	if combinedSignal.Direction != "HOLD" {
+		log.Infof("✅ ACTIONABLE SIGNAL: %s with confidence %.2f%%", combinedSignal.Direction, combinedSignal.Confidence*100)
+	} else {
+		log.Debugf("Signal is HOLD (no action needed)")
+	}
+	
+	log.Info("=== SIGNAL GENERATION COMPLETE ===")
 }
 
 func (bot *AutonomousBot) mainLoop(ctx context.Context) {
@@ -321,14 +358,58 @@ func (bot *AutonomousBot) processSignals() {
 		// Получаем последний сигнал для символа
 		latestSignal := bot.signalHandler.GetLatestSignalForSymbol(symbol)
 		if latestSignal == nil {
-			log.Debugf("No signal found for symbol %s", symbol)
-			continue
+			log.Debugf("No signal found for symbol %s - generating signal now", symbol)
+			// Try to generate signal immediately if we have enough data
+			timeframe := bot.config.Timeframes[0]
+			key := symbol + ":" + timeframe
+			candleCount := len(bot.candleBuffers[key])
+			currentPrice := bot.lastPrices[symbol]
+			
+			log.Debugf("Signal generation check: candles=%d, price=%.2f", candleCount, currentPrice)
+			
+			if candleCount >= 60 && currentPrice > 0 {
+				indicatorSet := bot.indicatorMgr.GetOrCreate(symbol, timeframe)
+				techSignals := indicatorSet.GetSignals(currentPrice)
+				techScore := signals.CalculateTechnicalScore(techSignals)
+				combinedSignal := signals.CombineSignals(techScore, 0.0, 0.0)
+				combinedSignal.Symbol = symbol
+				combinedSignal.Timeframe = timeframe
+				combinedSignal.Price = currentPrice
+				
+				// Get ATR from indicators
+				indicatorValues := indicatorSet.UpdateAll(
+					bot.lastPrices[symbol],
+					bot.lastPrices[symbol],
+					bot.lastPrices[symbol],
+					0,
+				)
+				if indicatorValues != nil {
+					combinedSignal.ATR = indicatorValues.ATR14
+				}
+				
+				bot.signalHandler.UpdateSignal(combinedSignal)
+				latestSignal = combinedSignal
+				log.Infof("✅ Generated signal on-demand: %s with confidence %.2f%% (techScore=%.4f)", 
+					combinedSignal.Direction, combinedSignal.Confidence*100, techScore)
+			} else {
+				log.Debugf("❌ Cannot generate signal: candles=%d (need 60+), price=%.2f", candleCount, currentPrice)
+			}
+			
+			if latestSignal == nil {
+				continue
+			}
 		}
 
-		// Проверяем уверенность сигнала
-		if latestSignal.Confidence < bot.config.MinConfidence {
+		// Проверяем уверенность сигнала (MinConfidence может быть 0.0 для скальпинга)
+		if bot.config.MinConfidence > 0 && latestSignal.Confidence < bot.config.MinConfidence {
 			log.Debugf("Signal confidence %.2f below minimum %.2f for %s", 
 				latestSignal.Confidence, bot.config.MinConfidence, symbol)
+			continue
+		}
+		
+		// Skip HOLD signals
+		if latestSignal.Direction == "HOLD" {
+			log.Debugf("Signal is HOLD for %s, skipping", symbol)
 			continue
 		}
 
@@ -344,8 +425,8 @@ func (bot *AutonomousBot) processSignals() {
 				InitialBalance:    bot.config.InitialBalance,
 				MaxPositionSize:   bot.config.MaxPositionSize,
 				RiskPerTrade:      bot.config.RiskPerTrade,
-				DefaultStopLoss:   0.02,
-				DefaultTakeProfit: 0.04,
+				DefaultStopLoss:   0.01,   // Tighter stop for scalping (1% instead of 2%)
+				DefaultTakeProfit: 0.02,   // Smaller target for scalping (2% instead of 4%)
 				MinConfidence:     bot.config.MinConfidence,
 				MaxDailyTrades:    bot.config.MaxDailyTrades,
 				CooldownMinutes:   bot.config.CooldownMinutes,
@@ -415,8 +496,8 @@ func (bot *AutonomousBot) UpdateConfig(newConfig *BotConfig) {
 		InitialBalance:    newConfig.InitialBalance,
 		MaxPositionSize:   newConfig.MaxPositionSize,
 		RiskPerTrade:      newConfig.RiskPerTrade,
-		DefaultStopLoss:   0.02,
-		DefaultTakeProfit: 0.04,
+		DefaultStopLoss:   0.01,   // Tighter stop for scalping
+		DefaultTakeProfit: 0.02,   // Smaller target for scalping
 		MinConfidence:     newConfig.MinConfidence,
 		MaxDailyTrades:    newConfig.MaxDailyTrades,
 		CooldownMinutes:   newConfig.CooldownMinutes,
