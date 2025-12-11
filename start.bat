@@ -21,3 +21,4 @@ if exist "%APP_PATH%" (
     exit /b 1
 )
 
+
