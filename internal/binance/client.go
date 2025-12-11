@@ -1,3 +1,5 @@
+// Package binance provides integration with Binance cryptocurrency exchange API.
+// It includes REST API client for market data and WebSocket client for real-time updates.
 package binance
 
 import (
@@ -8,11 +10,14 @@ import (
 	"github.com/adshao/go-binance/v2"
 )
 
+// Client wraps the Binance REST API client for market data operations.
+// It provides methods to fetch candlestick data, ticker information, and order book data.
 type Client struct {
-	client *binance.Client
-	ctx    context.Context
+	client *binance.Client // Binance SDK client
+	ctx    context.Context // Context for API requests
 }
 
+// Kline represents a candlestick/OHLCV data point from Binance.
 type Kline struct {
 	OpenTime  int64   `json:"openTime"`
 	Open      float64 `json:"open"`
@@ -23,6 +28,7 @@ type Kline struct {
 	CloseTime int64   `json:"closeTime"`
 }
 
+// Ticker represents 24-hour ticker price statistics for a symbol.
 type Ticker struct {
 	Symbol             string  `json:"symbol"`
 	PriceChange        float64 `json:"priceChange"`
@@ -32,6 +38,8 @@ type Ticker struct {
 	QuoteVolume        float64 `json:"quoteVolume"`
 }
 
+// NewClient creates a new Binance REST API client.
+// Uses public API endpoints, no API keys required for market data.
 func NewClient() *Client {
 	return &Client{
 		client: binance.NewClient("", ""), // Public API, no keys needed for market data

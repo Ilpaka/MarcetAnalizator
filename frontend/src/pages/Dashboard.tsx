@@ -1,3 +1,7 @@
+/**
+ * Dashboard page component - main trading interface.
+ * Displays market data, charts, order book, trade history, and trading controls.
+ */
 import { useMarketStore } from '../store/marketStore'
 import { useTradingStore } from '../store/tradingStore'
 import { useMarketData } from '../hooks/useMarketData'
@@ -11,6 +15,7 @@ import { TradeHistory } from '../components/analytics/TradeHistory'
 import { TradePanel } from '../components/trading/TradePanel'
 import { BarChart3 } from 'lucide-react'
 
+// Available timeframe options for chart display
 const TIMEFRAMES = [
   { label: '1m', value: '1m' },
   { label: '5m', value: '5m' },
@@ -20,6 +25,10 @@ const TIMEFRAMES = [
   { label: '1d', value: '1d' },
 ]
 
+/**
+ * Dashboard component - main trading interface page.
+ * Automatically loads market data, tickers, and trading information on mount.
+ */
 export default function Dashboard() {
   useMarketData()
   useAllTickers()

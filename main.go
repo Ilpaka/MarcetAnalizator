@@ -1,3 +1,6 @@
+// Package main is the entry point for the crypto trading bot application.
+// This application provides a desktop GUI for automated cryptocurrency trading
+// using various technical analysis strategies and machine learning predictions.
 package main
 
 import (
@@ -13,11 +16,14 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// main initializes and runs the Wails desktop application.
+// It creates the application instance, configures window options,
+// and starts the GUI with embedded frontend assets.
 func main() {
 	// Create application instance
 	app := NewApp()
 
-	// Create application with options
+	// Configure and run Wails application
 	err := wails.Run(&options.App{
 		Title:  "Крипто Торговый Бот",
 		Width:  1920,

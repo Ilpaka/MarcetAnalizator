@@ -6,9 +6,72 @@ import { useTradingStore } from '../store/tradingStore'
 import { useMarketData } from '../hooks/useMarketData'
 import { Card } from '../components/ui/Card'
 import { TradingZonesChart } from '../components/charts/TradingZonesChart'
-import { Play, Square, Settings, TrendingUp, TrendingDown, Activity } from 'lucide-react'
+import { IntervalStrategyPanel } from '../components/interval/IntervalStrategyPanel'
+import { Play, Square, Settings, TrendingUp, TrendingDown, Activity, BarChart3, Zap, Shield, Flame } from 'lucide-react'
 // @ts-ignore
 import * as App from '../../wailsjs/go/main/App'
+
+// Пресеты риска для ботов
+type RiskPreset = 'safe' | 'normal' | 'risky' | 'meat'
+
+interface RiskPresetConfig {
+  name: string
+  description: string
+  icon: any
+  color: string
+  riskPerTrade: number
+  maxPositionSize: number
+  minConfidence: number
+  maxDailyTrades: number
+  cooldownMinutes: number
+}
+
+const RISK_PRESETS: Record<RiskPreset, RiskPresetConfig> = {
+  safe: {
+    name: 'Безопасный',
+    description: 'Консервативная торговля, минимум риска',
+    icon: Shield,
+    color: 'text-blue-400',
+    riskPerTrade: 0.01,      // 1%
+    maxPositionSize: 0.05,   // 5%
+    minConfidence: 0.7,       // 70%
+    maxDailyTrades: 5,
+    cooldownMinutes: 10,
+  },
+  normal: {
+    name: 'Нормальный',
+    description: 'Сбалансированный подход',
+    icon: Activity,
+    color: 'text-green-400',
+    riskPerTrade: 0.02,      // 2%
+    maxPositionSize: 0.1,    // 10%
+    minConfidence: 0.5,      // 50%
+    maxDailyTrades: 10,
+    cooldownMinutes: 5,
+  },
+  risky: {
+    name: 'Рискованный',
+    description: 'Агрессивная торговля, больше сделок',
+    icon: Zap,
+    color: 'text-yellow-400',
+    riskPerTrade: 0.05,      // 5%
+    maxPositionSize: 0.2,    // 20%
+    minConfidence: 0.3,      // 30%
+    maxDailyTrades: 20,
+    cooldownMinutes: 2,
+  },
+  meat: {
+    name: 'Мясо',
+    description: 'Максимальная активность, много сделок',
+    icon: Flame,
+    color: 'text-red-400',
+    riskPerTrade: 0.1,       // 10%
+    maxPositionSize: 0.3,    // 30%
+    minConfidence: 0.1,      // 10% - очень низкий порог
+    maxDailyTrades: 50,      // Много сделок
+    cooldownMinutes: 1,      // Минимальная пауза
+  },
+}
 
 const TIMEFRAMES = [
   { label: '1m', value: '1m', description: 'Минутный (для тестов)' },
@@ -26,6 +89,8 @@ export default function BotControl() {
   const { positions, balance } = useTradingStore()
   const [localConfig, setLocalConfig] = useState(config)
   const [selectedTradingTimeframe, setSelectedTradingTimeframe] = useState(timeframes[0] || '1m')
+  const [strategyType, setStrategyType] = useState<'technical' | 'interval'>('technical')
+  const [selectedPreset, setSelectedPreset] = useState<RiskPreset | null>(null)
   
   // Загружаем данные графика
   useMarketData()
@@ -49,7 +114,8 @@ export default function BotControl() {
       )
       
       // Показываем уведомление об успешном сохранении
-      alert('Настройки успешно сохранены!')
+      const presetName = selectedPreset ? RISK_PRESETS[selectedPreset].name : 'Пользовательские'
+      alert(`Настройки успешно сохранены! (Пресет: ${presetName})`)
     } catch (error) {
       console.error('Failed to save config:', error)
       alert('Ошибка при сохранении настроек: ' + (error instanceof Error ? error.message : 'Неизвестная ошибка'))
@@ -70,7 +136,27 @@ export default function BotControl() {
     setSelectedTimeframe(timeframe)
   }
 
+  const applyPreset = (presetKey: RiskPreset) => {
+    const preset = RISK_PRESETS[presetKey]
+    setLocalConfig({
+      riskPerTrade: preset.riskPerTrade,
+      maxPositionSize: preset.maxPositionSize,
+      minConfidence: preset.minConfidence,
+      maxDailyTrades: preset.maxDailyTrades,
+      cooldownMinutes: preset.cooldownMinutes,
+    })
+    setSelectedPreset(presetKey)
+  }
+
   const activePositions = positions.filter((p) => p.symbol === selectedSymbol)
+
+  // Если выбрана интервальная стратегия, показываем её панель
+  if (strategyType === 'interval') {
+    return <IntervalStrategyPanel onSwitchToTechnical={() => setStrategyType('technical')} />
+  }
+
+  // TypeScript теперь знает, что strategyType === 'technical'
+  const isTechnical = strategyType === 'technical'
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-bg-primary">
@@ -79,6 +165,33 @@ export default function BotControl() {
         <div>
           <h1 className="text-2xl font-bold text-white">Управление ботом</h1>
           <p className="text-sm text-gray-400 mt-1">Настройка и мониторинг автономного торгового бота</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Strategy Type Toggle */}
+          <div className="flex bg-bg-tertiary rounded-lg p-1">
+            <button
+              onClick={() => setStrategyType('technical')}
+              className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
+                isTechnical
+                  ? 'bg-primary-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <Activity className="w-4 h-4" />
+              Техническая
+            </button>
+            <button
+              onClick={() => setStrategyType('interval')}
+              className={`px-4 py-2 rounded-md transition-colors flex items-center gap-2 ${
+                !isTechnical
+                  ? 'bg-primary-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4" />
+              Интервальная
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
@@ -193,6 +306,40 @@ export default function BotControl() {
               ) : (
                 <div className="text-center text-gray-400 py-4">Нет данных</div>
               )}
+            </div>
+          </Card>
+
+          {/* Risk Presets */}
+          <Card className="p-4 flex-shrink-0">
+            <div className="flex items-center gap-2 mb-4">
+              <Settings className="w-5 h-5 text-primary-500" />
+              <h2 className="text-lg font-semibold text-white">Пресеты риска</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {(Object.keys(RISK_PRESETS) as RiskPreset[]).map((presetKey) => {
+                const preset = RISK_PRESETS[presetKey]
+                const Icon = preset.icon
+                const isSelected = selectedPreset === presetKey
+                return (
+                  <button
+                    key={presetKey}
+                    onClick={() => applyPreset(presetKey)}
+                    className={`p-3 rounded-lg border-2 transition-all text-left ${
+                      isSelected
+                        ? 'border-primary-500 bg-primary-500/20'
+                        : 'border-border-primary bg-bg-tertiary hover:border-primary-500/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className={`w-4 h-4 ${preset.color}`} />
+                      <span className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-gray-300'}`}>
+                        {preset.name}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-400">{preset.description}</div>
+                  </button>
+                )
+              })}
             </div>
           </Card>
 

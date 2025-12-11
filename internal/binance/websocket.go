@@ -3,6 +3,7 @@ package binance
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -65,12 +66,12 @@ func NewWSClient() *WSClient {
 func (ws *WSClient) Connect() error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
-	
+
 	// Если уже подключены, не переподключаемся
 	if ws.conn != nil {
 		return nil
 	}
-	
+
 	var err error
 	ws.conn, _, err = websocket.DefaultDialer.Dial(ws.url, nil)
 	if err != nil {
@@ -104,6 +105,8 @@ func (ws *WSClient) SubscribeKline(symbol, interval string) (chan *KlineWSMessag
 		"id":     time.Now().UnixNano(),
 	}
 
+	log.Infof("Subscribing to WebSocket stream: %s", stream)
+
 	// Синхронизированная запись в WebSocket
 	ws.writeMu.Lock()
 	if ws.conn == nil {
@@ -114,8 +117,11 @@ func (ws *WSClient) SubscribeKline(symbol, interval string) (chan *KlineWSMessag
 	ws.writeMu.Unlock()
 
 	if err != nil {
+		log.Errorf("Failed to send subscription message for %s: %v", stream, err)
 		return nil, err
 	}
+
+	log.Infof("Subscription message sent for %s, waiting for confirmation...", stream)
 
 	ch := make(chan *KlineWSMessage, 100)
 	genericCh := make(chan interface{}, 100)
@@ -124,14 +130,21 @@ func (ws *WSClient) SubscribeKline(symbol, interval string) (chan *KlineWSMessag
 	go func() {
 		for msg := range genericCh {
 			if kline, ok := msg.(*KlineWSMessage); ok {
-				ch <- kline
+				select {
+				case ch <- kline:
+				default:
+					log.Warnf("Kline channel full, dropping message for %s", stream)
+				}
 			}
 		}
 	}()
 
 	ws.mu.Lock()
 	ws.subscribers[stream] = append(ws.subscribers[stream], genericCh)
+	subscriberCount := len(ws.subscribers[stream])
 	ws.mu.Unlock()
+
+	log.Infof("Subscription registered for %s, total subscribers: %d", stream, subscriberCount)
 
 	return ch, nil
 }
@@ -219,10 +232,25 @@ func (ws *WSClient) SubscribeAllTickers() (chan *TickerWSMessage, error) {
 }
 
 func (ws *WSClient) handleMessage(data []byte) {
+	// First, try to parse as subscription response
+	var subResponse map[string]interface{}
+	if err := json.Unmarshal(data, &subResponse); err == nil {
+		if result, ok := subResponse["result"]; ok {
+			log.Infof("WebSocket subscription confirmed: %v", result)
+			return
+		}
+		if id, ok := subResponse["id"]; ok {
+			log.Debugf("WebSocket subscription response ID: %v", id)
+			return
+		}
+	}
+
 	// Try to parse as kline message
 	var kline KlineWSMessage
 	if err := json.Unmarshal(data, &kline); err == nil && kline.EventType == "kline" {
 		stream := fmt.Sprintf("%s@kline_%s", strings.ToLower(kline.Symbol), kline.Kline.Interval)
+		log.Debugf("📊 WebSocket KLINE received: %s, IsFinal=%v, Close=%.8f",
+			stream, kline.Kline.IsFinal, parseFloatSafe(kline.Kline.Close))
 		ws.broadcast(stream, &kline)
 		return
 	}
@@ -231,9 +259,21 @@ func (ws *WSClient) handleMessage(data []byte) {
 	var ticker TickerWSMessage
 	if err := json.Unmarshal(data, &ticker); err == nil && ticker.EventType == "24hrTicker" {
 		stream := fmt.Sprintf("%s@ticker", strings.ToLower(ticker.Symbol))
+		log.Debugf("📈 WebSocket TICKER received: %s, Price=%.8f", stream, parseFloatSafe(ticker.LastPrice))
 		ws.broadcast(stream, &ticker)
 		return
 	}
+
+	// Log unhandled messages for debugging
+	log.Debugf("WebSocket unhandled message: %s", string(data))
+}
+
+func parseFloatSafe(s string) float64 {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0.0
+	}
+	return f
 }
 
 func (ws *WSClient) broadcast(stream string, msg interface{}) {
@@ -241,13 +281,17 @@ func (ws *WSClient) broadcast(stream string, msg interface{}) {
 	defer ws.mu.RUnlock()
 
 	if subs, ok := ws.subscribers[stream]; ok {
-		for _, ch := range subs {
+		log.Debugf("Broadcasting to %d subscribers for stream: %s", len(subs), stream)
+		for i, ch := range subs {
 			select {
 			case ch <- msg:
+				log.Debugf("Message sent to subscriber %d for stream %s", i, stream)
 			default:
-				// Channel full, skip
+				log.Warnf("Channel full, skipping subscriber %d for stream %s", i, stream)
 			}
 		}
+	} else {
+		log.Debugf("No subscribers found for stream: %s", stream)
 	}
 }
 
@@ -280,9 +324,11 @@ func (ws *WSClient) readLoop() {
 		}
 	}()
 
+	log.Info("WebSocket readLoop started")
 	for {
 		select {
 		case <-ws.done:
+			log.Info("WebSocket readLoop stopped: done signal received")
 			return
 		default:
 			_, message, err := ws.conn.ReadMessage()

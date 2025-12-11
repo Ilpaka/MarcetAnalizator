@@ -1,10 +1,14 @@
+// Package indicators provides technical analysis indicators for trading signals.
+// It includes popular indicators like RSI, MACD, Bollinger Bands, EMA, etc.
 package indicators
 
 import (
 	"sync"
 )
 
-// IndicatorSet holds all indicators for a symbol/timeframe combination
+// IndicatorSet holds all technical indicators for a symbol/timeframe combination.
+// It provides a convenient way to calculate and update multiple indicators
+// simultaneously with new price data.
 type IndicatorSet struct {
 	EMA9     *EMA
 	EMA21    *EMA

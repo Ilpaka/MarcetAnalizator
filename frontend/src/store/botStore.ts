@@ -36,11 +36,11 @@ export const useBotStore = create<BotState>((set) => ({
   symbols: ['BTCUSDT'],
   timeframes: ['5m', '15m', '1h'],
   config: {
-    riskPerTrade: 0.02,
-    maxPositionSize: 0.1,
-    minConfidence: 0.6,
-    maxDailyTrades: 10,
-    cooldownMinutes: 5,
+    riskPerTrade: 0.05,      // Увеличено для более активной торговли
+    maxPositionSize: 0.2,    // Увеличено
+    minConfidence: 0.3,      // Снижено для большего количества сделок
+    maxDailyTrades: 20,      // Увеличено
+    cooldownMinutes: 2,      // Уменьшено для более частых сделок
   },
   stats: null,
 

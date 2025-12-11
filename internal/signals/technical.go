@@ -4,6 +4,8 @@ import (
 	"crypto-trading-bot/internal/indicators"
 	"math"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func CalculateTechnicalScore(indicatorSignals []indicators.Signal) float64 {
@@ -64,8 +66,8 @@ func CalculateTechnicalScore(indicatorSignals []indicators.Signal) float64 {
 func CombineSignals(technicalScore, mlScore, sentimentScore float64) *Signal {
 	// For scalping, prioritize technical analysis
 	weights := map[string]float64{
-		"technical": 0.6, // Increased weight for technical signals
-		"ml":         0.3,
+		"technical": 0.7, // Increased weight for technical signals
+		"ml":         0.2,
 		"sentiment":  0.1,
 	}
 
@@ -75,31 +77,36 @@ func CombineSignals(technicalScore, mlScore, sentimentScore float64) *Signal {
 
 	var direction string
 	var confidence float64
-
-	// Much lower threshold for scalping - allow small profits
-	// Threshold reduced from 0.1 to 0.05 for more frequent trading
-	scalpingThreshold := 0.05
 	
-	if combinedScore > scalpingThreshold {
-		direction = "LONG"
-		// Boost confidence for scalping - even small signals can be profitable
-		confidence = math.Min(combinedScore*1.2, 1.0) // Boost by 20%
-		// Ensure minimum confidence for trading
-		if confidence < 0.3 {
-			confidence = 0.3
+	// Если технический скор не равен нулю, значит есть сигналы от индикаторов
+	// В этом случае ТОЧНО торгуем!
+	if math.Abs(technicalScore) > 0.0001 {
+		// Есть технические сигналы - ТОРГУЕМ ОБЯЗАТЕЛЬНО!
+		if technicalScore > 0 {
+			direction = "LONG"
+			// Гарантируем минимум 25% уверенности для любых технических сигналов
+			// Это гарантирует что сделка произойдет даже при MinConfidence = 0.3
+			confidence = math.Max(math.Abs(technicalScore)*5.0, 0.25)
+			confidence = math.Min(confidence, 1.0)
+		} else {
+			direction = "SHORT"
+			// Гарантируем минимум 25% уверенности для любых технических сигналов
+			confidence = math.Max(math.Abs(technicalScore)*5.0, 0.25)
+			confidence = math.Min(confidence, 1.0)
 		}
-	} else if combinedScore < -scalpingThreshold {
-		direction = "SHORT"
-		confidence = math.Min(-combinedScore*1.2, 1.0) // Boost by 20%
-		if confidence < 0.3 {
-			confidence = 0.3
+		
+		// Дополнительно увеличиваем уверенность на основе combinedScore
+		if math.Abs(combinedScore) > 0.01 {
+			confidence = math.Max(confidence, math.Min(math.Abs(combinedScore)*10.0, 1.0))
 		}
 	} else {
+		// Нет технических сигналов - HOLD
 		direction = "HOLD"
 		confidence = 0.0
 	}
 
 	return &Signal{
+		ID:              uuid.New().String(), // Генерируем ID сразу
 		Direction:       direction,
 		Confidence:      confidence,
 		TechnicalSignal: technicalScore,

@@ -10,6 +10,10 @@ export function CancelOrder(arg1) {
   return window['go']['main']['App']['CancelOrder'](arg1);
 }
 
+export function GetActiveIntervals() {
+  return window['go']['main']['App']['GetActiveIntervals']();
+}
+
 export function GetAllOrders() {
   return window['go']['main']['App']['GetAllOrders']();
 }
@@ -24,6 +28,14 @@ export function GetBalance() {
 
 export function GetBotStats() {
   return window['go']['main']['App']['GetBotStats']();
+}
+
+export function GetFearGreedIndex() {
+  return window['go']['main']['App']['GetFearGreedIndex']();
+}
+
+export function GetIntervalStats() {
+  return window['go']['main']['App']['GetIntervalStats']();
 }
 
 export function GetKlines(arg1, arg2, arg3) {
@@ -82,12 +94,24 @@ export function ProcessOrdersForSymbol(arg1, arg2) {
   return window['go']['main']['App']['ProcessOrdersForSymbol'](arg1, arg2);
 }
 
+export function RunIntervalBacktest(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RunIntervalBacktest'](arg1, arg2, arg3, arg4);
+}
+
 export function StartBot(arg1, arg2) {
   return window['go']['main']['App']['StartBot'](arg1, arg2);
 }
 
+export function StartIntervalStrategy(arg1) {
+  return window['go']['main']['App']['StartIntervalStrategy'](arg1);
+}
+
 export function StopBot() {
   return window['go']['main']['App']['StopBot']();
+}
+
+export function StopIntervalStrategy() {
+  return window['go']['main']['App']['StopIntervalStrategy']();
 }
 
 export function SubscribeKline(arg1, arg2) {

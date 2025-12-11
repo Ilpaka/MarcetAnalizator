@@ -1,3 +1,7 @@
+/**
+ * Main application component that sets up routing and navigation.
+ * Uses React Router for client-side routing between different pages.
+ */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import MainLayout from './components/layout/MainLayout'
 import Dashboard from './pages/Dashboard'
@@ -8,6 +12,10 @@ import Sentiment from './pages/Sentiment'
 import PredictionTesting from './pages/PredictionTesting'
 import Settings from './pages/Settings'
 
+/**
+ * App component defines the main routing structure of the application.
+ * All routes are nested under MainLayout which provides the sidebar and header.
+ */
 function App() {
   return (
     <BrowserRouter>

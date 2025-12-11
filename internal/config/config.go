@@ -27,11 +27,11 @@ func Load() *Config {
 		MLServiceAddr:     getEnv("ML_SERVICE_ADDR", "localhost:50051"),
 		TwitterBearerToken: getEnv("TWITTER_BEARER_TOKEN", ""),
 		InitialBalance:    getFloatEnv("INITIAL_BALANCE", 50000.0),
-		RiskPerTrade:      getFloatEnv("RISK_PER_TRADE", 0.02),
-		MaxPositionSize:   getFloatEnv("MAX_POSITION_SIZE", 0.1),
-		MinConfidence:     getFloatEnv("MIN_CONFIDENCE", 0.3), // Lowered for scalping
-		MaxDailyTrades:    getIntEnv("MAX_DAILY_TRADES", 10),
-		CooldownMinutes:   getIntEnv("COOLDOWN_MINUTES", 5),
+		RiskPerTrade:      getFloatEnv("RISK_PER_TRADE", 0.05),      // Увеличено для более активной торговли
+		MaxPositionSize:   getFloatEnv("MAX_POSITION_SIZE", 0.2),    // Увеличено
+		MinConfidence:     getFloatEnv("MIN_CONFIDENCE", 0.3),        // Снижено для большего количества сделок
+		MaxDailyTrades:    getIntEnv("MAX_DAILY_TRADES", 20),         // Увеличено
+		CooldownMinutes:   getIntEnv("COOLDOWN_MINUTES", 2),          // Уменьшено для более частых сделок
 		DatabasePath:      getEnv("DATABASE_PATH", "./trading.db"),
 		RedisAddr:         getEnv("REDIS_ADDR", "localhost:6379"),
 	}

@@ -15,30 +15,35 @@ import (
 	"crypto-trading-bot/internal/indicators"
 	"crypto-trading-bot/internal/sentiment"
 	"crypto-trading-bot/internal/signals"
+	"crypto-trading-bot/internal/strategies/interval"
 	"crypto-trading-bot/internal/trading"
 
 	log "github.com/sirupsen/logrus"
 )
 
-// App struct
+// App represents the main application structure that coordinates all components
+// of the trading bot including market data, trading engine, strategies, and UI.
 type App struct {
-	ctx              context.Context
-	binanceClient    *binance.Client
-	binanceWS        *binance.WSClient
-	indicatorManager *indicators.IndicatorManager
-	tradingEngine    *trading.TradingEngine
-	autonomousBot    *bot.AutonomousBot
-	signalHandler    *signals.SignalHandler
-	sentimentManager *sentiment.SentimentManager
-	cfg              *config.Config
+	ctx              context.Context              // Application context for cancellation and timeouts
+	binanceClient    *binance.Client              // REST API client for Binance
+	binanceWS        *binance.WSClient            // WebSocket client for real-time market data
+	indicatorManager *indicators.IndicatorManager // Technical indicator calculator
+	tradingEngine    *trading.TradingEngine       // Core trading execution engine
+	autonomousBot    *bot.AutonomousBot          // Autonomous trading bot
+	signalHandler    *signals.SignalHandler       // Trading signal processor
+	sentimentManager *sentiment.SentimentManager  // Sentiment analysis manager
+	intervalStrategy *interval.IntervalStrategy   // Interval trading strategy
+	cfg              *config.Config               // Application configuration
 }
 
-// NewApp creates a new App application struct
+// NewApp creates a new App instance with default values.
+// Components are initialized during startup.
 func NewApp() *App {
 	return &App{}
 }
 
-// setupLogging configures logging to file
+// setupLogging configures the logging system to write to both file and stdout.
+// Logs are written to bot.log with timestamps and debug level enabled.
 func setupLogging() error {
 	// Create log file
 	logFile, err := os.OpenFile("bot.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
@@ -67,8 +72,10 @@ func setupLogging() error {
 	return nil
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
+// startup initializes all application components when the app starts.
+// It sets up logging, loads configuration, initializes Binance clients,
+// creates trading engine, indicators, and starts background services.
+// The context is saved for use in runtime methods.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	
@@ -126,7 +133,8 @@ func (a *App) startup(ctx context.Context) {
 	log.Info("Application started successfully")
 }
 
-// shutdown is called at application termination
+// shutdown gracefully shuts down all application components.
+// It closes WebSocket connections and cleans up resources.
 func (a *App) shutdown(ctx context.Context) {
 	log.Info("Application shutting down...")
 
@@ -301,6 +309,11 @@ func (a *App) GetSentimentScore() sentiment.SentimentScore {
 	return a.sentimentManager.GetScore()
 }
 
+// GetFearGreedIndex returns the current Fear & Greed Index
+func (a *App) GetFearGreedIndex() (*sentiment.FearGreedIndex, error) {
+	return sentiment.GetFearGreedIndex()
+}
+
 // PlaceOrder places a manual order
 func (a *App) PlaceOrder(symbol, side, orderType string, price, quantity float64) error {
 	if a.tradingEngine == nil {
@@ -329,7 +342,8 @@ func (a *App) PlaceOrder(symbol, side, orderType string, price, quantity float64
 	var err error
 	// For MARKET orders, execute immediately
 	if orderType == "MARKET" {
-		err = a.tradingEngine.ExecuteMarketOrder(symbol, side, currentPrice, quantity)
+		// Для ручных ордеров StopLoss и TakeProfit не устанавливаем (0, 0)
+		err = a.tradingEngine.ExecuteMarketOrder(symbol, side, currentPrice, quantity, 0, 0)
 		if err != nil {
 			log.Errorf("Market order execution failed: %v", err)
 		} else {
@@ -679,4 +693,110 @@ func (a *App) PredictPrice(symbol, timeframe string) map[string]interface{} {
 
 	log.Infof("Prediction received: price=%.2f, confidence=%.2f", result["predicted_price"], result["confidence"])
 	return result
+}
+
+// StartIntervalStrategy запускает интервальную стратегию
+func (a *App) StartIntervalStrategy(config interval.IntervalConfig) error {
+	log.Info("=== STARTING INTERVAL STRATEGY ===")
+	log.Infof("Config: symbols=%v, daysToAnalyze=%d, minProfit=%.2f%%, maxProfit=%.2f%%, method=%d",
+		config.Symbols, config.DaysToAnalyze, config.MinProfitPercent, config.MaxProfitPercent, config.AnalysisMethod)
+
+	// Проверяем наличие символа
+	symbol := config.Symbol
+	if symbol == "" && len(config.Symbols) > 0 {
+		// Обратная совместимость
+		symbol = config.Symbols[0]
+	}
+	if symbol == "" {
+		err := fmt.Errorf("no symbol configured for interval strategy")
+		log.Errorf("Failed to start interval strategy: %v", err)
+		return err
+	}
+	
+	// Устанавливаем символ в конфигурацию для обратной совместимости
+	if len(config.Symbols) == 0 {
+		config.Symbols = []string{symbol}
+	}
+
+	// Если стратегия уже существует и запущена, останавливаем её
+	if a.intervalStrategy != nil {
+		log.Info("Stopping existing interval strategy...")
+		a.intervalStrategy.Stop()
+		time.Sleep(1 * time.Second) // Даем больше времени на остановку
+		log.Info("Existing strategy stopped")
+		// Очищаем ссылку для создания новой стратегии
+		a.intervalStrategy = nil
+	}
+
+	// Проверяем наличие необходимых компонентов
+	if a.tradingEngine == nil {
+		err := fmt.Errorf("trading engine is not initialized")
+		log.Errorf("Failed to start interval strategy: %v", err)
+		return err
+	}
+	if a.binanceClient == nil {
+		err := fmt.Errorf("binance client is not initialized")
+		log.Errorf("Failed to start interval strategy: %v", err)
+		return err
+	}
+	if a.ctx == nil {
+		err := fmt.Errorf("application context is not initialized")
+		log.Errorf("Failed to start interval strategy: %v", err)
+		return err
+	}
+
+	// Создаем новую стратегию с новой конфигурацией
+	log.Info("Creating new interval strategy...")
+	a.intervalStrategy = interval.NewIntervalStrategy(
+		&config,
+		a.tradingEngine,
+		a.binanceClient,
+	)
+	log.Info("New interval strategy created successfully")
+
+	log.Info("Starting interval strategy with context...")
+	if err := a.intervalStrategy.Start(a.ctx); err != nil {
+		log.Errorf("Failed to start interval strategy: %v", err)
+		// Очищаем ссылку на стратегию при ошибке
+		a.intervalStrategy = nil
+		return err
+	}
+
+	log.Info("=== INTERVAL STRATEGY STARTED SUCCESSFULLY ===")
+	return nil
+}
+
+// StopIntervalStrategy останавливает интервальную стратегию
+func (a *App) StopIntervalStrategy() {
+	if a.intervalStrategy != nil {
+		a.intervalStrategy.Stop()
+	}
+}
+
+// GetIntervalStats возвращает статистику интервальной торговли
+func (a *App) GetIntervalStats() interval.IntervalStats {
+	if a.intervalStrategy == nil {
+		return interval.IntervalStats{
+			ActiveIntervals: make(map[string]interval.PriceInterval),
+		}
+	}
+	return a.intervalStrategy.GetStats()
+}
+
+// GetActiveIntervals возвращает активные интервалы
+func (a *App) GetActiveIntervals() map[string]interval.PriceInterval {
+	if a.intervalStrategy == nil {
+		return make(map[string]interval.PriceInterval)
+	}
+	return a.intervalStrategy.GetActiveIntervals()
+}
+
+// RunIntervalBacktest запускает бэктест интервальной стратегии
+func (a *App) RunIntervalBacktest(
+	config interval.IntervalConfig,
+	symbol string,
+	startDate, endDate time.Time,
+) (*interval.BacktestResult, error) {
+	backtester := interval.NewBacktester(&config, a.binanceClient)
+	return backtester.Run(symbol, startDate, endDate)
 }

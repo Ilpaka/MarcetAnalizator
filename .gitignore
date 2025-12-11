@@ -60,6 +60,7 @@ Thumbs.db
 
 # Logs
 *.log
+bot.log
 
 # Environment variables
 .env

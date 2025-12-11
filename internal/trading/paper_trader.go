@@ -1,3 +1,5 @@
+// Package trading provides paper trading simulation for backtesting and
+// risk-free strategy testing without using real funds.
 package trading
 
 import (
@@ -9,14 +11,17 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// PaperTrader simulates trading without real money.
+// It tracks balance, positions, and trade history for paper trading.
 type PaperTrader struct {
-	initialBalance float64
-	balance        float64
-	positions      map[string]*Position
-	trades         []Trade
-	mu             sync.RWMutex
+	initialBalance float64              // Starting balance
+	balance        float64              // Current available balance
+	positions      map[string]*Position // Open positions by symbol
+	trades         []Trade              // Trade history
+	mu             sync.RWMutex         // Mutex for thread-safe operations
 }
 
+// Position represents an open trading position.
 type Position struct {
 	ID             string    `json:"id"`
 	Symbol         string    `json:"symbol"`
@@ -31,6 +36,7 @@ type Position struct {
 	UnrealizedPnLPct float64 `json:"unrealizedPnLPct"`
 }
 
+// Trade represents a completed trade with entry/exit prices and PnL.
 type Trade struct {
 	ID         string        `json:"id"`
 	Symbol     string        `json:"symbol"`
@@ -47,6 +53,7 @@ type Trade struct {
 	SignalID   string        `json:"signalId"`
 }
 
+// NewPaperTrader creates a new paper trader instance with the given initial balance.
 func NewPaperTrader(initialBalance float64) *PaperTrader {
 	return &PaperTrader{
 		initialBalance: initialBalance,
@@ -126,7 +133,10 @@ func (pt *PaperTrader) ClosePosition(symbol string, exitPrice float64, reason st
 	}
 
 	balanceBefore := pt.balance
-	pt.balance += pos.EntryPrice*pos.Quantity + pnl
+	// Возвращаем стоимость позиции плюс прибыль/убыток
+	// Это эквивалентно: balance += exitPrice * quantity
+	revenue := pos.EntryPrice*pos.Quantity + pnl
+	pt.balance += revenue
 	delete(pt.positions, symbol)
 	pt.trades = append(pt.trades, trade)
 
@@ -135,10 +145,11 @@ func (pt *PaperTrader) ClosePosition(symbol string, exitPrice float64, reason st
 	log.Infof("Symbol: %s, Side: %s", pos.Symbol, pos.Side)
 	log.Infof("Entry Price: %.8f, Exit Price: %.8f", pos.EntryPrice, exitPrice)
 	log.Infof("Quantity: %.8f", pos.Quantity)
+	log.Infof("Revenue: %.2f USDT (exitPrice * quantity)", exitPrice*pos.Quantity)
 	log.Infof("PnL: %.2f USDT (%.2f%%)", pnl, pnlPercent)
 	log.Infof("Duration: %v", trade.Duration)
 	log.Infof("Reason: %s", reason)
-	log.Infof("Balance: %.2f -> %.2f USDT (change: +%.2f)", balanceBefore, pt.balance, pnl)
+	log.Infof("Balance: %.2f -> %.2f USDT (change: +%.2f)", balanceBefore, pt.balance, revenue)
 	log.Infof("Signal ID: %s", pos.SignalID)
 	log.Info("=== POSITION CLOSE COMPLETE ===")
 

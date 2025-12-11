@@ -184,34 +184,59 @@ func (bot *AutonomousBot) loadHistoricalData() error {
 func (bot *AutonomousBot) subscribeToKlines(symbol, timeframe string) {
 	symbolLower := strings.ToLower(symbol)
 
+	log.Infof("🔌 Starting subscription to %s %s (stream: %s@kline_%s)", symbol, timeframe, symbolLower, timeframe)
+
 	ch, err := bot.binanceWS.SubscribeKline(symbolLower, timeframe)
 	if err != nil {
-		log.Errorf("Failed to subscribe to %s %s: %v", symbol, timeframe, err)
+		log.Errorf("❌ Failed to subscribe to %s %s: %v", symbol, timeframe, err)
 		return
 	}
 
+	log.Infof("✅ Successfully subscribed to %s %s, waiting for messages...", symbol, timeframe)
+
+	// Счетчик сообщений для мониторинга
+	messageCount := 0
+	lastLogTime := time.Now()
+
 	for msg := range ch {
+		messageCount++
+		now := time.Now()
+
+		// Логируем каждое 10-е сообщение или раз в минуту
+		if messageCount%10 == 0 || now.Sub(lastLogTime) >= time.Minute {
+			log.Infof("📨 Received %d messages from WebSocket for %s %s (last: IsFinal=%v, Close=%.8f)",
+				messageCount, symbol, timeframe, msg.Kline.IsFinal, parseFloat(msg.Kline.Close))
+			lastLogTime = now
+		}
+
 		bot.processKline(symbol, timeframe, msg)
 	}
+
+	log.Warnf("⚠️ WebSocket channel closed for %s %s (total messages received: %d)", symbol, timeframe, messageCount)
 }
 
 func (bot *AutonomousBot) processKline(symbol, timeframe string, msg *binance.KlineWSMessage) {
 	close := parseFloat(msg.Kline.Close)
-	bot.signalHandler.UpdatePrice(symbol, close)
-	bot.lastPrices[symbol] = close
-
-	if !msg.Kline.IsFinal {
-		return
-	}
-
 	high := parseFloat(msg.Kline.High)
 	low := parseFloat(msg.Kline.Low)
 	volume := parseFloat(msg.Kline.Volume)
 	open := parseFloat(msg.Kline.Open)
 
-	log.Debugf("=== PROCESSING KLINE ===")
-	log.Debugf("Symbol: %s, Timeframe: %s", symbol, timeframe)
-	log.Debugf("OHLCV: O=%.8f, H=%.8f, L=%.8f, C=%.8f, V=%.2f", open, high, low, close, volume)
+	// ВСЕГДА обновляем цену, даже для промежуточных свечей
+	bot.signalHandler.UpdatePrice(symbol, close)
+	bot.lastPrices[symbol] = close
+
+	log.Infof("📊 PROCESSING KLINE: %s %s | IsFinal=%v | OHLCV: O=%.8f H=%.8f L=%.8f C=%.8f V=%.2f | Price updated: %.8f",
+		symbol, timeframe, msg.Kline.IsFinal, open, high, low, close, volume, close)
+
+	// Для промежуточных свечей обновляем только цену и логируем
+	if !msg.Kline.IsFinal {
+		log.Debugf("Intermediate candle for %s %s - price updated to %.8f, waiting for final candle", symbol, timeframe, close)
+		return
+	}
+
+	// Для финальных свечей обновляем индикаторы и генерируем сигналы
+	log.Infof("✅ FINAL CANDLE received for %s %s", symbol, timeframe)
 
 	indicatorSet := bot.indicatorMgr.GetOrCreate(symbol, timeframe)
 	values := indicatorSet.UpdateAll(high, low, close, volume)
@@ -237,16 +262,11 @@ func (bot *AutonomousBot) processKline(symbol, timeframe string, msg *binance.Kl
 		bot.candleBuffers[key] = bot.candleBuffers[key][1:]
 	}
 
-	log.Debugf("Candle buffer size: %d for %s, IsFinal=%v", len(bot.candleBuffers[key]), key, msg.Kline.IsFinal)
+	log.Debugf("Candle buffer size: %d for %s", len(bot.candleBuffers[key]), key)
 
-	// Generate signal synchronously for final candles to ensure it's processed immediately
-	// Also generate for non-final candles if we have enough data (for real-time trading)
+	// Generate signal for final candles
 	if msg.Kline.IsFinal {
-		log.Debugf("Final candle received, generating signal for %s %s", symbol, timeframe)
-		bot.generateSignal(symbol, timeframe, values)
-	} else if len(bot.candleBuffers[key]) >= 60 {
-		// Generate signal even for non-final candles if we have enough data
-		log.Debugf("Non-final candle but enough data, generating signal for %s %s", symbol, timeframe)
+		log.Infof("🚀 Generating signal for final candle: %s %s", symbol, timeframe)
 		bot.generateSignal(symbol, timeframe, values)
 	}
 }
@@ -339,6 +359,10 @@ func (bot *AutonomousBot) mainLoop(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
+	// Fallback: обновление цены через REST API каждые 2 секунды
+	priceUpdateTicker := time.NewTicker(2 * time.Second)
+	defer priceUpdateTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -348,6 +372,33 @@ func (bot *AutonomousBot) mainLoop(ctx context.Context) {
 		case <-ticker.C:
 			bot.processSignals()
 			bot.updatePositions()
+		case <-priceUpdateTicker.C:
+			// Fallback: обновляем цену через REST API, если WebSocket не работает
+			bot.updatePricesViaREST()
+		}
+	}
+}
+
+// updatePricesViaREST обновляет цены через REST API как fallback
+func (bot *AutonomousBot) updatePricesViaREST() {
+	for _, symbol := range bot.config.Symbols {
+		ticker, err := bot.binanceClient.GetTicker24h(symbol)
+		if err != nil {
+			log.Debugf("Failed to update price via REST for %s: %v", symbol, err)
+			continue
+		}
+
+		currentPrice := ticker.LastPrice
+		oldPrice := bot.lastPrices[symbol]
+
+		// Обновляем цену только если она изменилась
+		if oldPrice == 0 || currentPrice != oldPrice {
+			bot.signalHandler.UpdatePrice(symbol, currentPrice)
+			bot.lastPrices[symbol] = currentPrice
+			if oldPrice != 0 {
+				log.Debugf("💰 Price updated via REST API: %s %.8f -> %.8f (change: %.2f%%)",
+					symbol, oldPrice, currentPrice, (currentPrice-oldPrice)/oldPrice*100)
+			}
 		}
 	}
 }
@@ -401,11 +452,18 @@ func (bot *AutonomousBot) processSignals() {
 		}
 
 		// Проверяем уверенность сигнала (MinConfidence может быть 0.0 для скальпинга)
+		// Логируем детально для диагностики
 		if bot.config.MinConfidence > 0 && latestSignal.Confidence < bot.config.MinConfidence {
-			log.Debugf("Signal confidence %.2f below minimum %.2f for %s", 
+			log.Warnf("⚠️ Signal confidence %.2f below minimum %.2f for %s - SKIPPING", 
 				latestSignal.Confidence, bot.config.MinConfidence, symbol)
+			log.Warnf("   Signal details: Direction=%s, TechnicalScore=%.4f, Price=%.2f", 
+				latestSignal.Direction, latestSignal.TechnicalSignal, latestSignal.Price)
 			continue
 		}
+		
+		// Логируем успешную проверку уверенности
+		log.Infof("✅ Signal passed confidence check: %.2f >= %.2f for %s", 
+			latestSignal.Confidence, bot.config.MinConfidence, symbol)
 		
 		// Skip HOLD signals
 		if latestSignal.Direction == "HOLD" {
@@ -442,6 +500,13 @@ func (bot *AutonomousBot) processSignals() {
 			symbol, latestSignal.Direction, latestSignal.Confidence, latestSignal.Price)
 		log.Infof("Min Confidence Required: %.2f", bot.config.MinConfidence)
 		
+		// Проверяем текущий символ в trading engine
+		bot.mu.RLock()
+		engineSymbol := bot.tradingEngine.GetSymbol()
+		bot.mu.RUnlock()
+		log.Infof("Trading engine symbol: %s, Signal symbol: %s", engineSymbol, symbol)
+		
+		log.Infof("Calling bot.tradingEngine.ProcessSignal()...")
 		bot.tradingEngine.ProcessSignal(latestSignal)
 		log.Info("=== SIGNAL PROCESSING COMPLETE ===")
 	}

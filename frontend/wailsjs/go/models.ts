@@ -126,15 +126,232 @@ export namespace indicators {
 
 }
 
+export namespace interval {
+	
+	export class IntervalConfig {
+	    symbol: string;
+	    timeframe: string;
+	    periodMinutesToAnalyze: number;
+	    symbols: string[];
+	    daysToAnalyze: number;
+	    minProfitPercent: number;
+	    maxProfitPercent: number;
+	    topInstrumentsCount: number;
+	    analysisMethod: number;
+	    lowPercentile: number;
+	    highPercentile: number;
+	    stopLossPercent: number;
+	    maxPositionsCount: number;
+	    preferredPositionPrice: number;
+	    maxPositionPrice: number;
+	    recalculateIntervalHours: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new IntervalConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.symbol = source["symbol"];
+	        this.timeframe = source["timeframe"];
+	        this.periodMinutesToAnalyze = source["periodMinutesToAnalyze"];
+	        this.symbols = source["symbols"];
+	        this.daysToAnalyze = source["daysToAnalyze"];
+	        this.minProfitPercent = source["minProfitPercent"];
+	        this.maxProfitPercent = source["maxProfitPercent"];
+	        this.topInstrumentsCount = source["topInstrumentsCount"];
+	        this.analysisMethod = source["analysisMethod"];
+	        this.lowPercentile = source["lowPercentile"];
+	        this.highPercentile = source["highPercentile"];
+	        this.stopLossPercent = source["stopLossPercent"];
+	        this.maxPositionsCount = source["maxPositionsCount"];
+	        this.preferredPositionPrice = source["preferredPositionPrice"];
+	        this.maxPositionPrice = source["maxPositionPrice"];
+	        this.recalculateIntervalHours = source["recalculateIntervalHours"];
+	    }
+	}
+	export class BacktestResult {
+	    config: IntervalConfig;
+	    totalTrades: number;
+	    winningTrades: number;
+	    losingTrades: number;
+	    totalProfit: number;
+	    totalProfitPercent: number;
+	    averageDayProfit: number;
+	    maxDrawdown: number;
+	    bestSymbol: string;
+	    worstSymbol: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BacktestResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.config = this.convertValues(source["config"], IntervalConfig);
+	        this.totalTrades = source["totalTrades"];
+	        this.winningTrades = source["winningTrades"];
+	        this.losingTrades = source["losingTrades"];
+	        this.totalProfit = source["totalProfit"];
+	        this.totalProfitPercent = source["totalProfitPercent"];
+	        this.averageDayProfit = source["averageDayProfit"];
+	        this.maxDrawdown = source["maxDrawdown"];
+	        this.bestSymbol = source["bestSymbol"];
+	        this.worstSymbol = source["worstSymbol"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class PriceInterval {
+	    symbol: string;
+	    lower: number;
+	    upper: number;
+	    median: number;
+	    width: number;
+	    crosses: number;
+	    volatility: number;
+	    calculatedAt: time.Time;
+	    candlesAnalyzed: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PriceInterval(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.symbol = source["symbol"];
+	        this.lower = source["lower"];
+	        this.upper = source["upper"];
+	        this.median = source["median"];
+	        this.width = source["width"];
+	        this.crosses = source["crosses"];
+	        this.volatility = source["volatility"];
+	        this.calculatedAt = this.convertValues(source["calculatedAt"], time.Time);
+	        this.candlesAnalyzed = source["candlesAnalyzed"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class IntervalStats {
+	    activeIntervals: Record<string, PriceInterval>;
+	    totalCrosses: number;
+	    successfulTrades: number;
+	    failedTrades: number;
+	    avgHoldTime: number;
+	    bestSymbol: string;
+	    lastRecalculation: time.Time;
+	
+	    static createFrom(source: any = {}) {
+	        return new IntervalStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.activeIntervals = this.convertValues(source["activeIntervals"], PriceInterval, true);
+	        this.totalCrosses = source["totalCrosses"];
+	        this.successfulTrades = source["successfulTrades"];
+	        this.failedTrades = source["failedTrades"];
+	        this.avgHoldTime = source["avgHoldTime"];
+	        this.bestSymbol = source["bestSymbol"];
+	        this.lastRecalculation = this.convertValues(source["lastRecalculation"], time.Time);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace sentiment {
 	
+	export class FearGreedIndex {
+	    value: number;
+	    classification: string;
+	    timestamp: time.Time;
+	
+	    static createFrom(source: any = {}) {
+	        return new FearGreedIndex(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.classification = source["classification"];
+	        this.timestamp = this.convertValues(source["timestamp"], time.Time);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SentimentScore {
 	    overallScore: number;
 	    positive: number;
 	    negative: number;
 	    neutral: number;
-	    // Go type: time
-	    timestamp: any;
+	    timestamp: time.Time;
 	
 	    static createFrom(source: any = {}) {
 	        return new SentimentScore(source);
@@ -146,7 +363,7 @@ export namespace sentiment {
 	        this.positive = source["positive"];
 	        this.negative = source["negative"];
 	        this.neutral = source["neutral"];
-	        this.timestamp = this.convertValues(source["timestamp"], null);
+	        this.timestamp = this.convertValues(source["timestamp"], time.Time);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -184,8 +401,7 @@ export namespace signals {
 	    technicalSignal: number;
 	    mlSignal: number;
 	    sentimentSignal: number;
-	    // Go type: time
-	    timestamp: any;
+	    timestamp: time.Time;
 	    reasons: string[];
 	    model: string;
 	
@@ -206,7 +422,7 @@ export namespace signals {
 	        this.technicalSignal = source["technicalSignal"];
 	        this.mlSignal = source["mlSignal"];
 	        this.sentimentSignal = source["sentimentSignal"];
-	        this.timestamp = this.convertValues(source["timestamp"], null);
+	        this.timestamp = this.convertValues(source["timestamp"], time.Time);
 	        this.reasons = source["reasons"];
 	        this.model = source["model"];
 	    }
@@ -232,6 +448,23 @@ export namespace signals {
 
 }
 
+export namespace time {
+	
+	export class Time {
+	
+	
+	    static createFrom(source: any = {}) {
+	        return new Time(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	
+	    }
+	}
+
+}
+
 export namespace trading {
 	
 	export class Order {
@@ -243,12 +476,9 @@ export namespace trading {
 	    quantity: number;
 	    filledQty: number;
 	    status: string;
-	    // Go type: time
-	    createdAt: any;
-	    // Go type: time
-	    filledAt: any;
-	    // Go type: time
-	    cancelledAt: any;
+	    createdAt: time.Time;
+	    filledAt: time.Time;
+	    cancelledAt: time.Time;
 	
 	    static createFrom(source: any = {}) {
 	        return new Order(source);
@@ -264,9 +494,9 @@ export namespace trading {
 	        this.quantity = source["quantity"];
 	        this.filledQty = source["filledQty"];
 	        this.status = source["status"];
-	        this.createdAt = this.convertValues(source["createdAt"], null);
-	        this.filledAt = this.convertValues(source["filledAt"], null);
-	        this.cancelledAt = this.convertValues(source["cancelledAt"], null);
+	        this.createdAt = this.convertValues(source["createdAt"], time.Time);
+	        this.filledAt = this.convertValues(source["filledAt"], time.Time);
+	        this.cancelledAt = this.convertValues(source["cancelledAt"], time.Time);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -295,8 +525,7 @@ export namespace trading {
 	    quantity: number;
 	    stopLoss: number;
 	    takeProfit: number;
-	    // Go type: time
-	    openedAt: any;
+	    openedAt: time.Time;
 	    signalId: string;
 	    unrealizedPnL: number;
 	    unrealizedPnLPct: number;
@@ -314,7 +543,7 @@ export namespace trading {
 	        this.quantity = source["quantity"];
 	        this.stopLoss = source["stopLoss"];
 	        this.takeProfit = source["takeProfit"];
-	        this.openedAt = this.convertValues(source["openedAt"], null);
+	        this.openedAt = this.convertValues(source["openedAt"], time.Time);
 	        this.signalId = source["signalId"];
 	        this.unrealizedPnL = source["unrealizedPnL"];
 	        this.unrealizedPnLPct = source["unrealizedPnLPct"];
@@ -348,10 +577,8 @@ export namespace trading {
 	    pnl: number;
 	    pnlPercent: number;
 	    duration: number;
-	    // Go type: time
-	    openedAt: any;
-	    // Go type: time
-	    closedAt: any;
+	    openedAt: time.Time;
+	    closedAt: time.Time;
 	    reason: string;
 	    signalId: string;
 	
@@ -370,8 +597,8 @@ export namespace trading {
 	        this.pnl = source["pnl"];
 	        this.pnlPercent = source["pnlPercent"];
 	        this.duration = source["duration"];
-	        this.openedAt = this.convertValues(source["openedAt"], null);
-	        this.closedAt = this.convertValues(source["closedAt"], null);
+	        this.openedAt = this.convertValues(source["openedAt"], time.Time);
+	        this.closedAt = this.convertValues(source["closedAt"], time.Time);
 	        this.reason = source["reason"];
 	        this.signalId = source["signalId"];
 	    }
@@ -409,10 +636,8 @@ export namespace trading {
 	    peakBalance: number;
 	    dailyPnL: number;
 	    todayTrades: number;
-	    // Go type: time
-	    lastTradeTime: any;
-	    // Go type: time
-	    startTime: any;
+	    lastTradeTime: time.Time;
+	    startTime: time.Time;
 	
 	    static createFrom(source: any = {}) {
 	        return new TradingStats(source);
@@ -434,8 +659,8 @@ export namespace trading {
 	        this.peakBalance = source["peakBalance"];
 	        this.dailyPnL = source["dailyPnL"];
 	        this.todayTrades = source["todayTrades"];
-	        this.lastTradeTime = this.convertValues(source["lastTradeTime"], null);
-	        this.startTime = this.convertValues(source["startTime"], null);
+	        this.lastTradeTime = this.convertValues(source["lastTradeTime"], time.Time);
+	        this.startTime = this.convertValues(source["startTime"], time.Time);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

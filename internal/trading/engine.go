@@ -1,3 +1,5 @@
+// Package trading provides the core trading engine for executing trades,
+// managing positions, and tracking trading statistics.
 package trading
 
 import (
@@ -11,32 +13,38 @@ import (
 	"crypto-trading-bot/internal/signals"
 )
 
+// TradingEngine is the core component responsible for executing trades,
+// managing positions, processing signals, and tracking trading statistics.
+// It coordinates between paper trading, order management, risk management,
+// and signal processing.
 type TradingEngine struct {
-	paperTrader   *PaperTrader
-	orderManager  *OrderManager
-	riskManager   *risk.RiskManager
-	signalHandler *signals.SignalHandler
+	paperTrader   *PaperTrader              // Paper trading simulator
+	orderManager  *OrderManager             // Limit order manager
+	riskManager   *risk.RiskManager         // Risk management calculator
+	signalHandler *signals.SignalHandler    // Trading signal processor
 
-	isRunning bool
-	stopChan  chan struct{}
-	mu        sync.RWMutex
+	isRunning bool          // Engine running state
+	stopChan  chan struct{} // Stop signal channel
+	mu        sync.RWMutex // Mutex for thread-safe operations
 
-	config *EngineConfig
-	stats  *TradingStats
+	config *EngineConfig  // Engine configuration
+	stats  *TradingStats  // Trading statistics
 }
 
+// EngineConfig holds configuration parameters for the trading engine.
 type EngineConfig struct {
-	Symbol            string
-	InitialBalance    float64
-	MaxPositionSize   float64
-	RiskPerTrade      float64
-	DefaultStopLoss   float64
-	DefaultTakeProfit float64
-	MinConfidence     float64
-	MaxDailyTrades    int
-	CooldownMinutes   int
+	Symbol            string  // Trading symbol (e.g., "BTCUSDT")
+	InitialBalance    float64 // Starting balance in USDT
+	MaxPositionSize   float64 // Maximum position size in USDT
+	RiskPerTrade      float64 // Risk percentage per trade (0.01 = 1%)
+	DefaultStopLoss   float64 // Default stop loss percentage
+	DefaultTakeProfit float64 // Default take profit percentage
+	MinConfidence     float64 // Minimum signal confidence to trade
+	MaxDailyTrades    int     // Maximum trades per day
+	CooldownMinutes   int     // Cooldown between trades in minutes
 }
 
+// TradingStats tracks comprehensive trading performance metrics.
 type TradingStats struct {
 	TotalTrades      int       `json:"totalTrades"`
 	WinningTrades    int       `json:"winningTrades"`
@@ -58,6 +66,9 @@ type TradingStats struct {
 	mu sync.RWMutex
 }
 
+// NewTradingEngine creates a new trading engine instance with the given configuration.
+// It initializes all sub-components including paper trader, order manager,
+// risk manager, and signal handler.
 func NewTradingEngine(config *EngineConfig) *TradingEngine {
 	riskConfig := &risk.RiskConfig{
 		RiskPerTrade:      config.RiskPerTrade,
@@ -135,13 +146,60 @@ func (te *TradingEngine) GetSymbol() string {
 }
 
 func (te *TradingEngine) ProcessSignal(signal *signals.Signal) {
+	// Обрабатываем сигнал напрямую, не получая его заново
+	log.Infof("=== ProcessSignal CALLED ===")
+	
 	// Проверяем, что сигнал для нашего символа
+	if signal == nil {
+		log.Warnf("ProcessSignal: signal is nil - ABORTING")
+		return
+	}
+	
+	log.Infof("ProcessSignal: Received signal - Symbol=%s, Direction=%s, Confidence=%.2f, Price=%.2f, ConfigSymbol=%s", 
+		signal.Symbol, signal.Direction, signal.Confidence, signal.Price, te.config.Symbol)
+	
 	if signal.Symbol != te.config.Symbol {
+		log.Warnf("ProcessSignal: signal symbol %s != config symbol %s - ABORTING", signal.Symbol, te.config.Symbol)
 		return
 	}
 
-	// Вызываем processSignals, который обработает сигнал
-	te.processSignals()
+	// Проверяем, что сигнал не HOLD
+	if signal.Direction == "HOLD" {
+		log.Warnf("ProcessSignal: signal is HOLD - ABORTING")
+		return
+	}
+
+	canTradeResult := te.canTrade()
+	log.Infof("ProcessSignal: canTrade() = %v", canTradeResult)
+	if !canTradeResult {
+		log.Warnf("ProcessSignal: Cannot trade - daily limit or cooldown - ABORTING")
+		return
+	}
+
+	// Если MinConfidence = 0, то торгуем при любой уверенности
+	// Иначе проверяем порог
+	if te.config.MinConfidence > 0 && signal.Confidence < te.config.MinConfidence {
+		log.Warnf("ProcessSignal: Signal confidence %.2f below minimum %.2f - ABORTING", 
+			signal.Confidence, te.config.MinConfidence)
+		return
+	}
+
+	log.Infof("✅ ProcessSignal: All checks passed! Opening position...")
+	log.Infof("   Symbol: %s, Direction: %s, Confidence: %.2f, Price: %.2f", 
+		signal.Symbol, signal.Direction, signal.Confidence, signal.Price)
+
+	hasPosition := te.paperTrader.HasOpenPosition(te.config.Symbol)
+	log.Infof("ProcessSignal: HasOpenPosition(%s) = %v", te.config.Symbol, hasPosition)
+	
+	if hasPosition {
+		log.Infof("ProcessSignal: Has open position, handling existing position")
+		te.handleExistingPosition(signal)
+		return
+	}
+
+	log.Infof("🚀 ProcessSignal: No open position, calling openPosition()")
+	te.openPosition(signal)
+	log.Infof("ProcessSignal: openPosition() returned")
 }
 
 func (te *TradingEngine) mainLoop() {
@@ -181,8 +239,12 @@ func (te *TradingEngine) processSignals() {
 		return
 	}
 
-	if signal.Confidence < te.config.MinConfidence {
-		log.Debugf("Signal confidence %.2f below minimum %.2f", signal.Confidence, te.config.MinConfidence)
+	// Если MinConfidence = 0, то торгуем при любой уверенности
+	// Иначе проверяем порог
+	if te.config.MinConfidence > 0 && signal.Confidence < te.config.MinConfidence {
+		log.Debugf("Signal confidence %.2f below minimum %.2f - SKIPPING TRADE", signal.Confidence, te.config.MinConfidence)
+		log.Debugf("Signal details: Direction=%s, TechnicalScore=%.4f, Price=%.2f", 
+			signal.Direction, signal.TechnicalSignal, signal.Price)
 		return
 	}
 
@@ -202,11 +264,15 @@ func (te *TradingEngine) canTrade() bool {
 	defer te.stats.mu.RUnlock()
 
 	if te.stats.TodayTrades >= te.config.MaxDailyTrades {
+		log.Debugf("Cannot trade: TodayTrades (%d) >= MaxDailyTrades (%d)", 
+			te.stats.TodayTrades, te.config.MaxDailyTrades)
 		return false
 	}
 
 	timeSinceLast := time.Since(te.stats.LastTradeTime)
 	if timeSinceLast < time.Duration(te.config.CooldownMinutes)*time.Minute {
+		log.Debugf("Cannot trade: Cooldown - time since last trade: %v, required: %d minutes", 
+			timeSinceLast, te.config.CooldownMinutes)
 		return false
 	}
 
@@ -552,9 +618,13 @@ func (te *TradingEngine) CreateLimitOrder(symbol, side string, price, quantity f
 }
 
 // ExecuteMarketOrder executes a market order immediately
-func (te *TradingEngine) ExecuteMarketOrder(symbol, side string, price, quantity float64) error {
+// If stopLoss and takeProfit are provided (> 0), they will be set for the position
+func (te *TradingEngine) ExecuteMarketOrder(symbol, side string, price, quantity float64, stopLoss, takeProfit float64) error {
 	log.Infof("=== EXECUTING MARKET ORDER ===")
 	log.Infof("Symbol: %s, Side: %s, Price: %.8f, Quantity: %.8f", symbol, side, price, quantity)
+	if stopLoss > 0 {
+		log.Infof("StopLoss: %.8f, TakeProfit: %.8f", stopLoss, takeProfit)
+	}
 
 	position := &Position{
 		Symbol:     symbol,
@@ -562,6 +632,14 @@ func (te *TradingEngine) ExecuteMarketOrder(symbol, side string, price, quantity
 		EntryPrice: price,
 		Quantity:   quantity,
 		OpenedAt:   time.Now(),
+	}
+
+	// Устанавливаем StopLoss и TakeProfit если они указаны
+	if stopLoss > 0 {
+		position.StopLoss = stopLoss
+	}
+	if takeProfit > 0 {
+		position.TakeProfit = takeProfit
 	}
 
 	var err error
